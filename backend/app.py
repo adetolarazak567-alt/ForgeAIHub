@@ -1,14 +1,12 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-
-load_dotenv()
+from threading import Thread
+from uuid import uuid4
 
 app = Flask(__name__)
 
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
-
 BASE_URL = "https://openrouter.ai/api/v1"
 
 HEADERS = {
@@ -16,91 +14,100 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
+# In-memory storage for demo (replace with DB or persistent storage for production)
+results = {}
+
 # ---------------------------
-# IMAGE GENERATION
+# IMAGE GENERATION (TTI)
 # ---------------------------
+def generate_image_task(prompt, task_id):
+    try:
+        payload = {
+            "model": "flux-schnell",
+            "input": prompt,
+            "size": "1024x1024"
+        }
+        res = requests.post(f"{BASE_URL}/images", json=payload, headers=HEADERS)
+        data = res.json()
+        image_url = data.get("data", [{}])[0].get("url", "")
+        results[task_id] = {"status": "done", "image": image_url}
+    except Exception as e:
+        results[task_id] = {"status": "error", "error": str(e)}
+
 @app.route("/api/generate-image", methods=["POST"])
 def generate_image():
     data = request.json
     prompt = data.get("prompt")
+    if not prompt:
+        return jsonify({"error": "Prompt is required"}), 400
 
-    payload = {
-        "model": "deepseek-ai/Flux-Schnell",
-        "prompt": prompt,
-        "size": "1024x1024"
-    }
+    task_id = str(uuid4())
+    results[task_id] = {"status": "processing"}
+    Thread(target=generate_image_task, args=(prompt, task_id)).start()
 
+    return jsonify({"task_id": task_id, "status": "processing"}), 202
+
+@app.route("/api/image-result/<task_id>", methods=["GET"])
+def get_image_result(task_id):
+    if task_id not in results:
+        return jsonify({"error": "Invalid task ID"}), 404
+    return jsonify(results[task_id])
+
+# ---------------------------
+# TTS – AI Voice Text to Speech
+# ---------------------------
+VOICE_MODELS = {
+    "male_1": "en-US-JasonNeural",
+    "male_2": "en-US-GuyNeural",
+    "female_1": "en-US-JennyNeural",
+    "female_2": "en-US-AriaNeural",
+    "deep_male": "en-US-ChristopherNeural",
+    "soft_female": "en-US-AshleyNeural"
+}
+
+def tts_task(text, voice, task_id):
     try:
-        res = requests.post(
-            f"{BASE_URL}/images/generations",
-            json=payload,
-            headers=HEADERS
-        )
-
-        out = res.json()
-
-        return jsonify({
-            "image": out.get("data", [{}])[0].get("url", None)
-        })
-
+        payload = {
+            "model": "gpt-4o-mini-tts",
+            "input": text,
+            "voice": voice,
+            "format": "mp3"
+        }
+        res = requests.post(f"{BASE_URL}/audio/speech", json=payload, headers=HEADERS)
+        data = res.json()
+        audio_url = data.get("url", "")
+        results[task_id] = {"status": "done", "audio": audio_url}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ---------------------------
-# TEXT-TO-SPEECH (TTS)
-# ---------------------------
-
-# VALID OpenRouter voices:
-VOICES = [
-    "alloy",
-    "verse",
-    "amber",
-    "aria",
-    "luna",
-    "nova"
-]
+        results[task_id] = {"status": "error", "error": str(e)}
 
 @app.route("/api/tts", methods=["POST"])
 def tts():
     data = request.json
     text = data.get("text")
-    voice = data.get("voice", "alloy")
+    voice_key = data.get("voice", "female_1")
+    voice = VOICE_MODELS.get(voice_key, "en-US-JennyNeural")
 
-    if voice not in VOICES:
-        voice = "alloy"
+    if not text:
+        return jsonify({"error": "Text is required"}), 400
 
-    payload = {
-        "model": "openai/gpt-4o-mini-tts",
-        "input": text,
-        "voice": voice,
-        "format": "mp3"
-    }
+    task_id = str(uuid4())
+    results[task_id] = {"status": "processing"}
+    Thread(target=tts_task, args=(text, voice, task_id)).start()
 
-    try:
-        res = requests.post(
-            f"{BASE_URL}/audio/synthesize",
-            json=payload,
-            headers=HEADERS
-        )
+    return jsonify({"task_id": task_id, "status": "processing"}), 202
 
-        out = res.json()
-
-        return jsonify({
-            "audio": out.get("audio", None)
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+@app.route("/api/tts-result/<task_id>", methods=["GET"])
+def get_tts_result(task_id):
+    if task_id not in results:
+        return jsonify({"error": "Invalid task ID"}), 404
+    return jsonify(results[task_id])
 
 # ---------------------------
 # HEALTH CHECK
 # ---------------------------
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
-    return "ForgeAIHub Backend Running!"
-
+    return "ForgeAIHub Async Backend Running!"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
