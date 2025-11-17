@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ForgeAIHub - AI Vending</title>
+<style>
+/* minimal styling kept from your design */
+body{font-family:Poppins,system-ui;background:#f5f9ff;padding:20px;text-align:center}
+.container{max-width:980px;margin:auto}
+.box{background:#fff;padding:18px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.08);margin:16px 0}
+textarea,input,select,button{width:95%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #ddd;box-sizing:border-box}
+button{padding:10px 16px;border:none;border-radius:8px;background:#007bff;color:#fff;cursor:pointer}
+.small{width:auto;padding:8px 10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.out{white-space:pre-wrap;text-align:left;margin-top:12px;padding:8px;background:#f7fbff;border-radius:8px;min-height:48px}
+.media-preview{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-start}
+.voice-actions{display:flex;gap:8px;align-items:center}
+.icon-btn{background:#eee;border-radius:6px;padding:6px;cursor:pointer}
+.download-link{display:inline-flex;gap:6px;align-items:center}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ForgeAIHub</h1>
+  <p>AI Image, TTS, and Transcription </p>
+
+  <!-- IMAGE -->
+  <div class="box" id="imageBox">
+    <h2>Text → Image</h2>
+    <textarea id="imgPrompt" rows="3" placeholder="Describe the image (e.g. 'A neon cyberpunk street at night, cinematic')"></textarea>
+    <div class="row">
+      <select id="imgSize" class="small">
+        <option value="1024x1024">1024×1024</option>
+        <option value="768x768">768×768</option>
+        <option value="512x512">512×512</option>
+      </select>
+      <button id="genImage">Generate Image</button>
+      <button id="clearImg" class="small">Clear</button>
+    </div>
+    <div id="imgOut" class="out"></div>
+  </div>
+
+  <!-- TTS -->
+  <div class="box" id="ttsBox">
+    <h2>Text → Speech (TTS)</h2>
+    <textarea id="ttsText" rows="3" placeholder="Enter text to speak"></textarea>
+
+    <label>Choose voice (preset)</label>
+    <select id="ttsVoice">
+      <!-- 12 example voices — backend maps these to actual voice IDs or models -->
+      <option value="alloy_male">Alloy — Male</option>
+      <option value="echo_male">Echo — Male</option>
+      <option value="ethan_male">Ethan — Male</option>
+      <option value="verse_neutral">Verse — Neutral</option>
+      <option value="mike_male">Mike — Male</option>
+      <option value="james_male">James — Male</option>
+
+      <option value="aria_female">Aria — Female</option>
+      <option value="linda_female">Linda — Female</option>
+      <option value="nova_female">Nova — Female</option>
+      <option value="fable_female">Fable — Female</option>
+      <option value="coral_female">Coral — Female</option>
+      <option value="jessica_female">Jessica — Female</option>
+
+      <option value="custom">Custom voice id...</option>
+    </select>
+
+    <div id="customVoiceRow" style="display:none">
+      <input id="ttsVoiceCustom" placeholder="Custom voice id (advanced)"/>
+      <small>Use only if you know a supported voice id</small>
+    </div>
+
+    <div class="row">
+      <select id="ttsFormat" class="small">
+        <option value="mp3">mp3</option>
+        <option value="wav">wav</option>
+      </select>
+      <button id="genTTS">Generate Speech</button>
+      <button id="clearTTS" class="small">Clear</button>
+    </div>
+
+    <div id="ttsOut" class="out"></div>
+  </div>
+
+  <!-- STT -->
+  <div class="box" id="sttBox">
+    <h2>Speech → Text (Transcription)</h2>
+    <input type="file" id="sttFile" accept="audio/*"/>
+    <div class="row">
+      <button id="genSTT">Transcribe</button>
+      <button id="clearSTT" class="small">Clear</button>
+    </div>
+    <div id="sttOut" class="out"></div>
+  </div>
+
+  <footer style="margin-top:10px;color:#6b7280;font-size:13px">
+    <div>Backend required — deploy the Python backend (instructions below). The frontend never contains your secret key.</div>
+  </footer>
+</div>
+
+<script>
+/* ---------- UI helpers ---------- */
+function el(id){ return document.getElementById(id) }
+function setOut(id, html){ el(id).innerHTML = html }
+
+/* Show custom voice field */
+el('ttsVoice').addEventListener('change', () => {
+  el('customVoiceRow').style.display = (el('ttsVoice').value === 'custom') ? 'block' : 'none';
+});
+
+/* Base backend origin — adjust if backend hosted elsewhere */
+const BACKEND = window.__BACKEND_ORIGIN || ""; // if empty, relative paths used (assumes same origin)
+
+/* ---------- IMAGE ---------- */
+el('genImage').onclick = async () => {
+  const prompt = el('imgPrompt').value.trim();
+  const size = el('imgSize').value;
+  if(!prompt) return alert('Enter an image prompt');
+  setOut('imgOut', '⏳ Generating image...');
+
+  try{
+    const res = await fetch(BACKEND + '/api/image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, size })
+    });
+
+    if(!res.ok){
+      const txt = await res.text();
+      setOut('imgOut', '<pre>'+txt+'</pre>');
+      return;
+    }
+
+    const j = await res.json();
+    // prefer returned image_url, else base64 data
+    const url = j.image_url || j.data_uri || (j.data && j.data[0] && (j.data[0].url || ('data:image/png;base64,'+j.data[0].b64_json)));
+    if(url){
+      setOut('imgOut', `<div class="media-preview"><img src="${url}" class="ai-image" alt="AI image" /></div><div style="margin-top:8px"><a href="${url}" download="forgeai_image.png" class="download-link">⬇️ Download</a></div>`);
+    } else {
+      setOut('imgOut', '<pre>'+JSON.stringify(j,null,2)+'</pre>');
+    }
+  } catch(e){
+    setOut('imgOut', 'Error: '+e.message);
+  }
+};
+
+el('clearImg').onclick = () => setOut('imgOut','');
+
+/* ---------- TTS ---------- */
+el('genTTS').onclick = async () => {
+  const text = el('ttsText').value.trim();
+  let voice = el('ttsVoice').value;
+  const custom = el('ttsVoiceCustom').value.trim();
+  const format = el('ttsFormat').value || 'mp3';
+  if(voice === 'custom' && custom) voice = custom;
+  if(!text) return alert('Enter text for TTS');
+
+  setOut('ttsOut', '⏳ Generating audio...');
+
+  try {
+    // POST text; backend will stream/return audio bytes
+    const res = await fetch(BACKEND + '/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice, format })
+    });
+
+    if(!res.ok){
+      const txt = await res.text();
+      setOut('ttsOut', '<pre>'+txt+'</pre>');
+      return;
+    }
+
+    // get audio blob
+    const blob = await res.blob();
+    const audioURL = URL.createObjectURL(blob);
+
+    // create audio player + preview + download icon + voice label
+    const voiceLabel = voice;
+    const html = `
+      <div class="media-preview">
+        <div style="min-width:220px">
+          <div><strong>Voice:</strong> ${voiceLabel}</div>
+          <div class="voice-actions" style="margin-top:8px">
+            <button class="small" id="playBtn">▶️ Play</button>
+            <a class="download-link" id="downloadLink" href="${audioURL}" download="forgeai_tts.${format}">⬇️ Download</a>
+          </div>
+        </div>
+        <audio id="audioPlayer" src="${audioURL}" preload="none" style="display:none"></audio>
+      </div>
+    `;
+    setOut('ttsOut', html);
+
+    // attach play button
+    const audio = el('audioPlayer');
+    const playBtn = el('playBtn');
+    playBtn.onclick = () => {
+      // toggle play/pause
+      if(audio.paused){
+        audio.style.display = 'block';
+        audio.play();
+        playBtn.textContent = '⏸ Pause';
+      } else {
+        audio.pause();
+        playBtn.textContent = '▶️ Play';
+      }
+    };
+
+    // auto show audio control (not auto-play to avoid autoplay policies)
+    audio.onplay = () => { playBtn.textContent = '⏸ Pause'; };
+    audio.onpause = () => { playBtn.textContent = '▶️ Play'; };
+
+  } catch(e){
+    setOut('ttsOut','Error: '+e.message);
+  }
+};
+
+el('clearTTS').onclick = () => setOut('ttsOut','');
+
+/* ---------- STT (transcription) ---------- */
+el('genSTT').onclick = async () => {
+  const file = el('sttFile').files[0];
+  if(!file) return alert('Choose an audio file');
+  setOut('sttOut','⏳ Transcribing...');
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+
+    const res = await fetch(BACKEND + '/api/stt', {
+      method: 'POST',
+      body: form
+    });
+
+    if(!res.ok){
+      const txt = await res.text();
+      setOut('sttOut','<pre>'+txt+'</pre>');
+      return;
+    }
+
+    const json = await res.json();
+    // assume json.text
+    setOut('sttOut', json.text || JSON.stringify(json,null,2));
+  } catch(e){
+    setOut('sttOut','Error: '+e.message);
+  }
+};
+
+el('clearSTT').onclick = () => setOut('sttOut','');
+</script>
+</body>
+</html>
