@@ -11,7 +11,7 @@ CORS(app)  # 🔥 FIXES "Failed to fetch" by allowing all origins
 # -------------------------------------------
 # CONFIG — Set your API keys
 # -------------------------------------------
-OPENROUTER_KEY = "your-openrouter-api-key"   # <-- replace
+OPENROUTER_KEY = "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"   # <-- replace
 
 
 # -------------------------------------------
@@ -122,4 +122,4 @@ def home():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(hosthostyouenrouter-api-kei-keyyy
