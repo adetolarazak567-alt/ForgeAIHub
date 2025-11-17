@@ -1,106 +1,77 @@
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 import os
 import requests
-from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-
-load_dotenv()
+from io import BytesIO
+from pydub import AudioSegment
 
 app = Flask(__name__)
+CORS(app)  # allow cross-origin requests
 
-OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY")
+BASE_URL = "https://openrouter.ai/api/v1"  # TTS/Image endpoint
 
-BASE_URL = "https://openrouter.ai/api/v1"
+if not OPENROUTER_KEY:
+    raise Exception("OPENROUTER_API_KEY not set in environment variables")
 
-HEADERS = {
-    "Authorization": f"Bearer {OPENROUTER_KEY}",
-    "Content-Type": "application/json"
-}
-
-# ---------------------------
-# IMAGE GENERATION
-# ---------------------------
-@app.route("/api/generate-image", methods=["POST"])
-def generate_image():
-    data = request.json
-    prompt = data.get("prompt")
-
-    payload = {
-        "model": "deepseek-ai/Flux-Schnell",
-        "prompt": prompt,
-        "size": "1024x1024"
-    }
-
-    try:
-        res = requests.post(
-            f"{BASE_URL}/images/generations",
-            json=payload,
-            headers=HEADERS
-        )
-
-        out = res.json()
-
-        return jsonify({
-            "image": out.get("data", [{}])[0].get("url", None)
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ---------------------------
-# TEXT-TO-SPEECH (TTS)
-# ---------------------------
-
-# VALID OpenRouter voices:
-VOICES = [
-    "alloy",
-    "verse",
-    "amber",
-    "aria",
-    "luna",
-    "nova"
-]
 
 @app.route("/api/tts", methods=["POST"])
 def tts():
-    data = request.json
+    data = request.get_json()
     text = data.get("text")
-    voice = data.get("voice", "alloy")
+    voice = data.get("voice", "alloy_male")
+    fmt = data.get("format", "mp3")
 
-    if voice not in VOICES:
-        voice = "alloy"
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
 
-    payload = {
-        "model": "openai/gpt-4o-mini-tts",
-        "input": text,
-        "voice": voice,
-        "format": "mp3"
-    }
+    # Call OpenRouter TTS endpoint
+    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}"}
+    payload = {"text": text, "voice": voice, "format": fmt}
 
-    try:
-        res = requests.post(
-            f"{BASE_URL}/audio/synthesize",
-            json=payload,
-            headers=HEADERS
-        )
+    resp = requests.post(f"{BASE_URL}/text-to-speech", json=payload, headers=headers)
+    if resp.status_code != 200:
+        return jsonify({"error": resp.text}), resp.status_code
 
-        out = res.json()
-
-        return jsonify({
-            "audio": out.get("audio", None)
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    audio_bytes = BytesIO(resp.content)
+    return send_file(audio_bytes, mimetype=f"audio/{fmt}", as_attachment=True, download_name=f"tts.{fmt}")
 
 
-# ---------------------------
-# HEALTH CHECK
-# ---------------------------
-@app.route("/")
-def home():
-    return "ForgeAIHub Backend Running!"
+@app.route("/api/image", methods=["POST"])
+def image_gen():
+    data = request.get_json()
+    prompt = data.get("prompt")
+    size = data.get("size", "512x512")
+
+    if not prompt:
+        return jsonify({"error": "No prompt provided"}), 400
+
+    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}"}
+    payload = {"prompt": prompt, "size": size}
+
+    resp = requests.post(f"{BASE_URL}/image-generation", json=payload, headers=headers)
+    if resp.status_code != 200:
+        return jsonify({"error": resp.text}), resp.status_code
+
+    return jsonify(resp.json())
+
+
+@app.route("/api/stt", methods=["POST"])
+def stt():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}"}
+
+    files = {"file": (file.filename, file.stream, file.mimetype)}
+    resp = requests.post(f"{BASE_URL}/speech-to-text", files=files, headers=headers)
+
+    if resp.status_code != 200:
+        return jsonify({"error": resp.text}), resp.status_code
+
+    return jsonify(resp.json())
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
