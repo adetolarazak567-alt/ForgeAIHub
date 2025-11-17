@@ -1,7 +1,6 @@
-flask
-flask-cors
-gunicorn
+fastapi
+uvicorn
+celery
+redis
 requests
-pydub
-ffmpeg-python
 python-dotenv
