@@ -1,125 +1,121 @@
-import base64
-import io
+import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import requests
+from pydub import AudioSegment
+from io import BytesIO
 
 app = Flask(__name__)
-CORS(app)  # 🔥 FIXES "Failed to fetch" by allowing all origins
+CORS(app)
 
+# -----------------------------
+# 🔐 Load OpenRouter Key
+# -----------------------------
+OPENROUTER_KEY = os.getenv("OPENROUTER_KEY") or "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"
 
-# -------------------------------------------
-# CONFIG — Set your API keys
-# -------------------------------------------
-OPENROUTER_KEY = "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"   # <-- replace
+# -----------------------------
+# 🔥 Base headers for OpenRouter
+# -----------------------------
+BASE_HEADERS = {
+    "Authorization": f"Bearer {OPENROUTER_KEY}",
+    "HTTP-Referer": "https://aroearning.netlify.app",
+    "X-Title": "ForgeAIHub",
+    "Content-Type": "application/json"
+}
 
-
-# -------------------------------------------
-# IMAGE GENERATION
-# -------------------------------------------
+# -----------------------------
+# 1️⃣ IMAGE GENERATION
+# -----------------------------
 @app.route("/api/image", methods=["POST"])
 def generate_image():
     data = request.json
     prompt = data.get("prompt")
     size = data.get("size", "1024x1024")
 
-    url = "https://openrouter.ai/api/v1/images"
-
     payload = {
+        "model": "openai/gpt-image-1",
         "prompt": prompt,
         "size": size
     }
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}",
-        "Content-Type": "application/json"
-    }
+    res = requests.post(
+        "https://openrouter.ai/api/v1/images",
+        headers=BASE_HEADERS,
+        json=payload
+    )
 
-    r = requests.post(url, json=payload, headers=headers)
-
-    if r.status_code != 200:
-        return jsonify({"error": r.text}), 400
-
-    res = r.json()
-    
-    # Try to extract the image URL or base64
-    try:
-        img_url = res["data"][0]["url"]
-        return jsonify({ "image_url": img_url })
-    except:
-        b64 = res["data"][0]["b64_json"]
-        return jsonify({ "data_uri": f"data:image/png;base64,{b64}" })
+    return jsonify(res.json())
 
 
-# -------------------------------------------
-# TEXT TO SPEECH (TTS)
-# -------------------------------------------
+# -----------------------------
+# 2️⃣ TEXT → SPEECH (TTS)
+# -----------------------------
 @app.route("/api/tts", methods=["POST"])
 def tts():
     data = request.json
-    text = data.get("text", "")
-    voice = data.get("voice", "alloy")
-    fmt = data.get("format", "mp3")
-
-    url = "https://openrouter.ai/api/v1/audio"
+    text = data.get("text")
+    voice = data.get("voice", "alloy_male")
+    format_ext = data.get("format", "mp3")
 
     payload = {
+        "model": "openai/gpt-4o-mini-tts",
         "input": text,
         "voice": voice,
-        "format": fmt
+        "format": format_ext
     }
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}",
-        "Content-Type": "application/json"
-    }
+    res = requests.post(
+        "https://openrouter.ai/api/v1/audio/speech",
+        headers=BASE_HEADERS,
+        json=payload
+    )
 
-    r = requests.post(url, json=payload, headers=headers)
-
-    if r.status_code != 200:
-        return jsonify({"error": r.text}), 400
-
-    audio_bytes = base64.b64decode(r.json()["audio"])
+    audio_bytes = res.content
 
     return send_file(
-        io.BytesIO(audio_bytes),
-        mimetype=f"audio/{fmt}",
+        BytesIO(audio_bytes),
+        mimetype=f"audio/{format_ext}",
         as_attachment=True,
-        download_name=f"tts.{fmt}"
+        download_name=f"forge_tts.{format_ext}"
     )
 
 
-# -------------------------------------------
-# SPEECH TO TEXT (STT)
-# -------------------------------------------
+# -----------------------------
+# 3️⃣ SPEECH → TEXT (STT)
+# -----------------------------
 @app.route("/api/stt", methods=["POST"])
 def stt():
-    file = request.files.get("file")
-    if not file:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    url = "https://openrouter.ai/api/v1/audio/transcriptions"
+    file = request.files["file"]
+    audio_bytes = file.read()
 
     files = {
-        "file": (file.filename, file.stream, file.mimetype)
+        "file": ("audio.wav", audio_bytes, file.content_type)
     }
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}"
-    }
+    res = requests.post(
+        "https://openrouter.ai/api/v1/audio/transcriptions",
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_KEY}",
+            "HTTP-Referer": "https://aroearning.netlify.app",
+            "X-Title": "ForgeAIHub",
+        },
+        files=files,
+        data={"model": "openai/gpt-4o-mini-transcribe"}
+    )
 
-    r = requests.post(url, files=files, headers=headers)
-
-    if r.status_code != 200:
-        return jsonify({"error": r.text}), 400
-
-    return jsonify(r.json())
+    return jsonify(res.json())
 
 
+# -----------------------------
+# APP ROOT
+# -----------------------------
 @app.route("/", methods=["GET"])
 def home():
-    return "ForgeAIHub backend is running."
+    return jsonify({"status": "Forge backend running"})
 
 
+# -----------------------------
+# RUN (Local only)
+# -----------------------------
 if __name__ == "__main__":
-    app.run(hosthostyouenrouter-api-kei-keyyy
+    app.run(host="0.0.0.0", port=5000)
