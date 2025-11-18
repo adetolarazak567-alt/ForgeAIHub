@@ -1,77 +1,93 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 import os
-import requests
-from io import BytesIO
-from pydub import AudioSegment
+import base64
+import io
+from openai import OpenAI
 
 app = Flask(__name__)
-CORS(app)  # allow cross-origin requests
+CORS(app)
 
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY")
-BASE_URL = "https://openrouter.ai/api/v1"  # TTS/Image endpoint
+# Load API key
+OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 
-if not OPENROUTER_KEY:
-    raise Exception("OPENROUTER_API_KEY not set in environment variables")
+client = OpenAI(api_key=OPENROUTER_KEY, base_url="https://openrouter.ai/api/v1")
 
 
-@app.route("/api/tts", methods=["POST"])
+@app.route("/tts", methods=["POST"])
 def tts():
-    data = request.get_json()
-    text = data.get("text")
-    voice = data.get("voice", "alloy_male")
-    fmt = data.get("format", "mp3")
+    data = request.json
+    text = data.get("text", "")
 
     if not text:
         return jsonify({"error": "No text provided"}), 400
 
-    # Call OpenRouter TTS endpoint
-    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}"}
-    payload = {"text": text, "voice": voice, "format": fmt}
+    # Generate speech (MP3)
+    response = client.audio.speech.create(
+        model="gpt-4o-mini-tts",
+        voice="alloy",
+        input=text
+    )
 
-    resp = requests.post(f"{BASE_URL}/text-to-speech", json=payload, headers=headers)
-    if resp.status_code != 200:
-        return jsonify({"error": resp.text}), resp.status_code
+    audio_bytes = response.read()
 
-    audio_bytes = BytesIO(resp.content)
-    return send_file(audio_bytes, mimetype=f"audio/{fmt}", as_attachment=True, download_name=f"tts.{fmt}")
+    return send_file(
+        io.BytesIO(audio_bytes),
+        mimetype="audio/mpeg",
+        as_attachment=False,
+        download_name="audio.mp3"
+    )
 
 
-@app.route("/api/image", methods=["POST"])
-def image_gen():
-    data = request.get_json()
-    prompt = data.get("prompt")
-    size = data.get("size", "512x512")
+@app.route("/image", methods=["POST"])
+def image():
+    data = request.json
+    prompt = data.get("prompt", "")
 
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
 
-    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}"}
-    payload = {"prompt": prompt, "size": size}
+    response = client.images.generate(
+        model="flux-pro",
+        prompt=prompt,
+        size="1024x1024"
+    )
 
-    resp = requests.post(f"{BASE_URL}/image-generation", json=payload, headers=headers)
-    if resp.status_code != 200:
-        return jsonify({"error": resp.text}), resp.status_code
+    image_base64 = response.data[0].b64_json
+    image_bytes = base64.b64decode(image_base64)
 
-    return jsonify(resp.json())
+    file_path = "generated_image.png"
+    with open(file_path, "wb") as f:
+        f.write(image_bytes)
+
+    return jsonify({"url": request.host_url + file_path})
 
 
-@app.route("/api/stt", methods=["POST"])
-def stt():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+@app.route("/logo", methods=["POST"])
+def logo():
+    data = request.json
+    prompt = "Minimal modern logo, " + data.get("prompt", "")
 
-    file = request.files["file"]
-    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}"}
+    response = client.images.generate(
+        model="flux-pro",
+        prompt=prompt,
+        size="1024x1024"
+    )
 
-    files = {"file": (file.filename, file.stream, file.mimetype)}
-    resp = requests.post(f"{BASE_URL}/speech-to-text", files=files, headers=headers)
+    image_base64 = response.data[0].b64_json
+    image_bytes = base64.b64decode(image_base64)
 
-    if resp.status_code != 200:
-        return jsonify({"error": resp.text}), resp.status_code
+    file_path = "logo.png"
+    with open(file_path, "wb") as f:
+        f.write(image_bytes)
 
-    return jsonify(resp.json())
+    return jsonify({"url": request.host_url + file_path})
+
+
+@app.route("/")
+def home():
+    return "AI Backend Running!"
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=10000)
