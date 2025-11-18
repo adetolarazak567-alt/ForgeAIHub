@@ -2,69 +2,50 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import io
 import os
-import openai
+from gtts import gTTS
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # allow cross-origin requests
 
-# Read key from environment variable
-OPENAI_KEY = os.getenv("OPENAI_KEY")
-if not OPENAI_KEY:
-    raise ValueError("Set environment variable OPENAI_KEY")
+# Optional environment variable (use if you integrate OpenRouter later)
+OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY")
 
-openai.api_key = OPENAI_KEY
-
-# ------------- TTS -------------
+# ---------------- TTS ----------------
 @app.route("/tts", methods=["POST"])
 def tts():
     data = request.json
     text = data.get("text")
     if not text:
-        return jsonify({"error": "No text provided"}), 400
+        return jsonify({"error": "Text required"}), 400
 
-    audio = openai.audio.speech.create(
-        model="gpt-4o-mini-tts",
-        voice="alloy",
-        input=text
-    )
+    mp3_fp = io.BytesIO()
+    tts = gTTS(text)
+    tts.write_to_fp(mp3_fp)
+    mp3_fp.seek(0)
+    return send_file(mp3_fp, mimetype="audio/mpeg", download_name="audio.mp3")
 
-    return send_file(
-        io.BytesIO(audio.audio_data),
-        mimetype="audio/mpeg",
-        as_attachment=False,
-        download_name="audio.mp3"
-    )
-
-# ------------- IMAGE -------------
+# ---------------- Text → Image ----------------
 @app.route("/image", methods=["POST"])
 def image():
     data = request.json
     prompt = data.get("prompt")
     if not prompt:
-        return jsonify({"error": "No prompt provided"}), 400
+        return jsonify({"error": "Prompt required"}), 400
 
-    img = openai.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="512x512"
-    )
-    url = img.data[0].url
+    # placeholder image (replace with real AI API later)
+    url = "https://via.placeholder.com/512.png?text=" + prompt.replace(" ", "+")
     return jsonify({"url": url})
 
-# ------------- LOGO -------------
+# ---------------- Logo Maker ----------------
 @app.route("/logo", methods=["POST"])
 def logo():
     data = request.json
     prompt = data.get("prompt")
     if not prompt:
-        return jsonify({"error": "No prompt provided"}), 400
+        return jsonify({"error": "Prompt required"}), 400
 
-    img = openai.images.generate(
-        model="gpt-image-1",
-        prompt=prompt + " logo, vector style",
-        size="512x512"
-    )
-    url = img.data[0].url
+    # placeholder logo
+    url = "https://via.placeholder.com/256.png?text=" + prompt.replace(" ", "+")
     return jsonify({"url": url})
 
 if __name__ == "__main__":
