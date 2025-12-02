@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>SmartVendo — TTS, TTI & Chat</title>
+<title>ForgeAIHub — TTS, TTI & Chat</title>
 <style>
   :root{--accent:#007bff;--bg:#f5f9ff}
   body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Poppins",sans-serif;margin:0;background:linear-gradient(135deg,#eaf6ff,#fbfdff);padding:28px}
@@ -35,7 +35,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>SmartVendo — TTS · TTI · Chat</h1>
+    <h1>ForgeAIHub — TTS, TTI & Chat</h1>
     <div id="workerUrlPreview" style="color:#666;font-size:0.9rem">Backend: not set</div>
   </header>
 
@@ -44,22 +44,17 @@
     <section class="card" aria-label="Text to Speech">
       <h3>TTS — Text → Speech</h3>
       <label for="ttsText">Text</label>
-      <textarea id="ttsText" rows="5">Welcome to SmartVendo — demo voice.</textarea>
+      <textarea id="ttsText" rows="5">Welcome to ForgeAIHub — demo voice.</textarea>
 
       <div class="row" style="margin-top:8px">
         <div style="flex:1">
           <label for="voiceSelect">Voice</label>
           <select id="voiceSelect">
-            <option>Soft Female</option>
-            <option>Strong Female</option>
-            <option>African Female</option>
-            <option>UK Female</option>
-            <option>US Female</option>
-            <option>Young Male</option>
-            <option>Deep Male</option>
-            <option>African Male</option>
-            <option>Robotic</option>
-            <option>Narrator</option>
+            <option>Joanna</option>
+            <option>Matthew</option>
+            <option>Kimberly</option>
+            <option>Justin</option>
+            <option>Salli</option>
           </select>
         </div>
         <div style="width:120px">
@@ -114,15 +109,15 @@
 </div>
 
 <script>
-/* ====== CONFIG — set this to your deployed Node.js backend URL ====== */
-const WORKER_BASE_URL = "https://smartvendo-backend.onrender.com"; // <-- replace with your backend URL
-document.getElementById('workerUrlPreview').textContent = WORKER_BASE_URL;
+/* ====== CONFIG — set this to your deployed backend URL ====== */
+const BACKEND_URL = "https://forgeaihub-4.onrender.com"; // <-- your Node.js backend
+document.getElementById('workerUrlPreview').textContent = BACKEND_URL;
 
 /* ====== HELPERS ====== */
 function show(el, yes=true){ el.style.display = yes ? '' : 'none'; }
 function blobToUrl(blob){ return URL.createObjectURL(blob); }
 
-/* ====== TTS ====== */
+/* ====== TTS (gTTS) ====== */
 const genTtsBtn = document.getElementById('genTtsBtn');
 const ttsText = document.getElementById('ttsText');
 const ttsOut = document.getElementById('ttsOut');
@@ -137,39 +132,50 @@ genTtsBtn.addEventListener('click', async () => {
   ttsOut.innerHTML='';
 
   try {
-    const resp = await fetch(`${WORKER_BASE_URL}/tts`, {
+    // Send text to backend
+    const resp = await fetch(`${BACKEND_URL}/tts`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        text,
-        voice: document.getElementById('voiceSelect').value,
-        speed: document.getElementById('speed').value
-      })
+      body: JSON.stringify({ text })
     });
-    if(!resp.ok){ const t=await resp.text(); ttsOut.innerHTML=`<div style="color:#b00">Error: ${t}</div>`; return; }
+    if(!resp.ok){ 
+      const t = await resp.text(); 
+      ttsOut.innerHTML=`<div style="color:#b00">Error: ${t}</div>`; 
+      return; 
+    }
     const blob = await resp.blob();
     const url = blobToUrl(blob);
+
+    // Create audio element
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.src = url;
     audio.autoplay = true;
     ttsOut.appendChild(audio);
 
+    // Download button
     const dl = document.createElement('button');
     dl.className='btn secondary';
     dl.textContent='Download audio';
-    dl.onclick=()=>{ const a=document.createElement('a'); a.href=url; a.download='speech.wav'; a.click(); };
+    dl.onclick=()=>{ 
+      const a=document.createElement('a'); 
+      a.href=url; 
+      a.download='speech.mp3'; 
+      a.click(); 
+    };
     ttsOut.appendChild(dl);
 
-    activeAudio=audio;
+    activeAudio = audio;
   } catch(err){
     ttsOut.innerHTML=`<div style="color:#b00">Network error: ${err.message}</div>`;
   } finally { show(ttsSpinner,false); }
 });
 
-stopTtsBtn.addEventListener('click', ()=>{ if(activeAudio){ activeAudio.pause(); activeAudio.currentTime=0; } });
+stopTtsBtn.addEventListener('click', ()=>{ 
+  if(activeAudio){ activeAudio.pause(); activeAudio.currentTime=0; } 
+});
 
-/* ====== TTI ====== */
+/* ====== TTI (Hugging Face Stable Diffusion) ====== */
 const genImgBtn=document.getElementById('genImgBtn');
 const imgPrompt=document.getElementById('imgPrompt');
 const imgOut=document.getElementById('imgOut');
@@ -182,7 +188,7 @@ genImgBtn.addEventListener('click', async ()=>{
   imgOut.innerHTML='';
 
   try{
-    const r=await fetch(`${WORKER_BASE_URL}/tti`, {
+    const r = await fetch(`${BACKEND_URL}/tti`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -191,26 +197,32 @@ genImgBtn.addEventListener('click', async ()=>{
         size: document.getElementById('sizeSel').value
       })
     });
-    if(!r.ok){ const t=await r.text(); imgOut.innerHTML=`<div style="color:#b00">Error: ${t}</div>`; return; }
-    const blob=await r.blob();
-    const url=blobToUrl(blob);
-    const img=document.createElement('img');
+    if(!r.ok){ 
+      const t=await r.text(); 
+      imgOut.innerHTML=`<div style="color:#b00">Error: ${t}</div>`; 
+      return; 
+    }
+    const blob = await r.blob();
+    const url = blobToUrl(blob);
+
+    const img = document.createElement('img');
     img.className='thumb';
-    img.src=url;
+    img.src = url;
     imgOut.appendChild(img);
 
-    const dl=document.createElement('button');
+    const dl = document.createElement('button');
     dl.className='btn secondary';
     dl.textContent='Download image';
-    dl.onclick=()=>{ const a=document.createElement('a'); a.href=url; a.download='image.png'; a.click(); };
+    dl.onclick = () => { const a = document.createElement('a'); a.href=url; a.download='image.png'; a.click(); };
     imgOut.appendChild(dl);
-  } catch(err){ imgOut.innerHTML=`<div style="color:#b00">Network error: ${err.message}</div>`; }
-  finally{ show(imgSpinner,false); }
+  } catch(err){
+    imgOut.innerHTML=`<div style="color:#b00">Network error: ${err.message}</div>`;
+  } finally{ show(imgSpinner,false); }
 });
 
 document.getElementById('clearImgBtn').addEventListener('click', ()=>{ imgPrompt.value=''; imgOut.innerHTML=''; });
 
-/* ====== CHATBOT ====== */
+/* ====== CHATBOT (Open-Source or Hugging Face LLM) ====== */
 const chatArea=document.getElementById('chatArea');
 const chatInput=document.getElementById('chatInput');
 const sendChatBtn=document.getElementById('sendChatBtn');
@@ -233,13 +245,17 @@ sendChatBtn.addEventListener('click', async ()=>{
   chatArea.scrollTop=chatArea.scrollHeight;
 
   try{
-    const r=await fetch(`${WORKER_BASE_URL}/chat`,{
+    const r = await fetch(`${BACKEND_URL}/chat`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text})
+      body:JSON.stringify({ text })
     });
-    if(!r.ok){ const t=await r.text(); spinner.textContent='Error: '+t; return; }
-    const j=await r.json();
+    if(!r.ok){ 
+      const t = await r.text(); 
+      spinner.textContent='Error: '+t; 
+      return; 
+    }
+    const j = await r.json();
     spinner.remove();
     addMsg(j.reply||j.result||'No reply','bot');
   } catch(err){ spinner.textContent='Network error: '+err.message; }
@@ -248,10 +264,10 @@ sendChatBtn.addEventListener('click', async ()=>{
 /* quick ping */
 (async function ping(){
   try{
-    const r=await fetch(`${WORKER_BASE_URL}/ping`);
-    console.log('ping',r.status);
+    const r = await fetch(`${BACKEND_URL}/ping`);
+    console.log('Backend ping',r.status);
   } catch(e){ console.warn('Backend ping failed',e.message); }
 })();
 </script>
 </body>
-</html>
+        </html>
