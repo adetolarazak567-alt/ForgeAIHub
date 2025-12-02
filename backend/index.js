@@ -2,15 +2,20 @@ import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import { exec } from "child_process"; // for gTTS
+import path from "path";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------------------------------
-// 🔑 ADD YOUR TOKEN HERE
+// 🔑 TOKEN FROM ENVIRONMENT
 // ---------------------------------------
-const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE"; // <-- paste your token
+const HF_TOKEN = process.env.HF_TOKEN;
+if (!HF_TOKEN) {
+  console.error("⚠️ HuggingFace token is missing. Set HF_TOKEN in environment variables.");
+  process.exit(1);
+}
 
 // ---------------------------------------
 // 🖼 TEXT → IMAGE (Stable Diffusion)
@@ -87,7 +92,7 @@ app.post("/api/tts", async (req, res) => {
     exec(`gtts-cli "${text}" --output ${filename}`, (err) => {
       if (err) return res.status(500).json({ error: err.message });
 
-      res.sendFile(filename, { root: "." }, () => {
+      res.sendFile(path.resolve(filename), () => {
         // delete file after sending
         exec(`rm ${filename}`);
       });
@@ -99,8 +104,9 @@ app.post("/api/tts", async (req, res) => {
 });
 
 // ---------------------------------------
-// 🚀 START SERVER
+// 🚀 START SERVER WITH DYNAMIC PORT
 // ---------------------------------------
-app.listen(3000, () => {
-  console.log("Backend running on http://localhost:3000");
+const PORT = process.env.PORT || 3000; // fallback for local dev
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
 });
