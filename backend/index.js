@@ -1,106 +1,106 @@
-// backend/index.js
-import express from 'express';
-import fetch from 'node-fetch';
-import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
+import express from "express";
+import fetch from "node-fetch";
+import cors from "cors";
+import { exec } from "child_process"; // for gTTS
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json());
 
-// ====== CONFIG ======
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // for TTS, TTI, Chat
-const PORT = process.env.PORT || 3000;
+// ---------------------------------------
+// 🔑 ADD YOUR TOKEN HERE
+// ---------------------------------------
+const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE"; // <-- paste your token
 
-// ====== Ping ======
-app.get('/ping', (req,res)=> res.send('pong'));
+// ---------------------------------------
+// 🖼 TEXT → IMAGE (Stable Diffusion)
+// ---------------------------------------
+app.post("/api/tti", async (req, res) => {
+  try {
+    const { prompt } = req.body;
 
-// ====== TTS ======
-app.post('/tts', async (req,res)=>{
-    try{
-        const { text, voice, speed } = req.body;
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: prompt }),
+      }
+    );
 
-        // Example: OpenAI TTS (replace with actual TTS API if needed)
-        const response = await fetch('https://api.openai.com/v1/audio/speech', {
-            method:'POST',
-            headers: {
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                'Content-Type':'application/json'
-            },
-            body: JSON.stringify({
-                model: "gpt-4o-mini-tts",
-                voice: voice || 'alloy',
-                input: text,
-                speed: parseFloat(speed) || 1
-            })
-        });
-
-        if(!response.ok) return res.status(response.status).send(await response.text());
-        const arrayBuffer = await response.arrayBuffer();
-        res.setHeader('Content-Type','audio/mpeg');
-        res.send(Buffer.from(arrayBuffer));
-    }catch(e){
-        res.status(500).send(e.message);
+    if (!response.ok) {
+      return res.status(500).json({ error: "Image generation failed" });
     }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", "image/png");
+    res.send(buffer);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ====== TTI ======
-app.post('/tti', async (req,res)=>{
-    try{
-        const { prompt, style, size } = req.body;
+// ---------------------------------------
+// 💬 CHATBOT (HuggingFace LLM)
+// ---------------------------------------
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
 
-        const response = await fetch('https://api.openai.com/v1/images/generations', {
-            method:'POST',
-            headers:{
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                'Content-Type':'application/json'
-            },
-            body: JSON.stringify({
-                model: "gpt-image-1",
-                prompt: prompt,
-                size: size+'x'+size
-            })
-        });
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: message }),
+      }
+    );
 
-        if(!response.ok) return res.status(response.status).send(await response.text());
-        const data = await response.json();
-        const imgUrl = data.data[0].url;
+    const data = await response.json();
+    const reply = data?.generated_text || "I couldn't generate a response.";
 
-        // fetch image and send as blob
-        const imgResp = await fetch(imgUrl);
-        const buf = await imgResp.arrayBuffer();
-        res.setHeader('Content-Type','image/png');
-        res.send(Buffer.from(buf));
-    }catch(e){
-        res.status(500).send(e.message);
-    }
+    res.json({ reply });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ====== Chat ======
-app.post('/chat', async (req,res)=>{
-    try{
-        const { text } = req.body;
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method:'POST',
-            headers:{
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                'Content-Type':'application/json'
-            },
-            body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                messages: [{role:'user', content: text}],
-                max_tokens: 300
-            })
-        });
-        if(!response.ok) return res.status(response.status).send(await response.text());
-        const j = await response.json();
-        const reply = j.choices[0].message.content;
-        res.json({ reply });
-    }catch(e){
-        res.status(500).send(e.message);
-    }
+// ---------------------------------------
+// 🔊 TEXT → SPEECH (gTTS)
+// ---------------------------------------
+app.post("/api/tts", async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    const filename = `audio_${Date.now()}.mp3`;
+
+    exec(`gtts-cli "${text}" --output ${filename}`, (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      res.sendFile(filename, { root: "." }, () => {
+        // delete file after sending
+        exec(`rm ${filename}`);
+      });
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ====== Start server ======
-app.listen(PORT, ()=> console.log(`Backend running on port ${PORT}`));
+// ---------------------------------------
+// 🚀 START SERVER
+// ---------------------------------------
+app.listen(3000, () => {
+  console.log("Backend running on http://localhost:3000");
+});
