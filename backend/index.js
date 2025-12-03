@@ -1,111 +1,106 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import fs from "fs";
-import gTTS from "gtts";
+import { exec } from "child_process"; // for gTTS
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ------------------ Hugging Face Token ------------------
-const HF_TOKEN = process.env.HF_TOKEN;
-if (!HF_TOKEN) {
-  console.warn("Warning: HF_TOKEN not set in environment variables!");
+// ---------------------------------------
+// 🔑 ADD YOUR TOKEN HERE
+// ---------------------------------------
+const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE"; // <-- paste your token
+
+// ---------------------------------------
+// 🖼 TEXT → IMAGE (Stable Diffusion)
+// ---------------------------------------
+app.post("/api/tti", async (req, res) => {
+try {
+const { prompt } = req.body;
+
+const response = await fetch(
+"https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+{
+method: "POST",
+headers: {
+"Authorization": Bearer ${HF_TOKEN},
+"Content-Type": "application/json",
+},
+body: JSON.stringify({ inputs: prompt }),
+}
+);
+
+if (!response.ok) {
+return res.status(500).json({ error: "Image generation failed" });
 }
 
-// ------------------ TEXT → IMAGE (TTI) ------------------
-app.post("/tti", async (req, res) => {
-  try {
-    const { prompt, style = "photorealistic", size = "512" } = req.body;
+const arrayBuffer = await response.arrayBuffer();
+const buffer = Buffer.from(arrayBuffer);
 
-    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+res.setHeader("Content-Type", "image/png");
+res.send(buffer);
 
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: prompt }),
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(500).json({ error: "Image generation failed: " + text });
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    res.setHeader("Content-Type", "image/png");
-    res.send(buffer);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
 });
 
-// ------------------ CHATBOT ------------------
-app.post("/chat", async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "Text is required" });
+// ---------------------------------------
+// 💬 CHATBOT (HuggingFace LLM)
+// ---------------------------------------
+app.post("/api/chat", async (req, res) => {
+try {
+const { message } = req.body;
 
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: text }),
-      }
-    );
+const response = await fetch(
+"https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
+{
+method: "POST",
+headers: {
+"Authorization": Bearer ${HF_TOKEN},
+"Content-Type": "application/json",
+},
+body: JSON.stringify({ inputs: message }),
+}
+);
 
-    const data = await response.json();
-    const reply = data?.generated_text || data?.[0]?.generated_text || "No response generated.";
+const data = await response.json();
+const reply = data?.generated_text || "I couldn't generate a response.";
 
-    res.json({ reply });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+res.json({ reply });
+
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
 });
 
-// ------------------ TEXT → SPEECH (TTS) ------------------
-app.post("/tts", async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "No text provided for TTS" });
+// ---------------------------------------
+// 🔊 TEXT → SPEECH (gTTS)
+// ---------------------------------------
+app.post("/api/tts", async (req, res) => {
+try {
+const { text } = req.body;
 
-    const filename = `tts_${Date.now()}.mp3`;
-    const tts = new gTTS(text, "en");
+const filename = audio_${Date.now()}.mp3;
 
-    tts.save(filename, (err) => {
-      if (err) return res.status(500).json({ error: "TTS failed" });
+exec(gtts-cli "${text}" --output ${filename}, (err) => {
+if (err) return res.status(500).json({ error: err.message });
 
-      res.sendFile(filename, { root: "." }, () => {
-        // delete temporary file
-        setTimeout(() => {
-          try { fs.unlinkSync(filename); } catch(e) {}
-        }, 1500);
-      });
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+res.sendFile(filename, { root: "." }, () => {
+// delete file after sending
+exec(rm ${filename});
+});
 });
 
-// ------------------ SIMPLE PING ------------------
-app.get("/ping", (req, res) => {
-  res.send("pong");
+} catch (err) {
+res.status(500).json({ error: err.message });
+}
 });
 
-// ------------------ START SERVER ------------------
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+// ---------------------------------------
+// 🚀 START SERVER
+// ---------------------------------------
+app.listen(3000, () => {
+console.log("Backend running on http://localhost:3000");
 });
