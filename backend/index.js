@@ -1,18 +1,21 @@
-
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import fs from "fs";
-import nodeGtts from "node-gtts";
+import gTTS from "gtts";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------------------------------
-// 🔑 ADD YOUR HUGGINGFACE TOKEN HERE
+// 🔑 HuggingFace Token from environment
 // ---------------------------------------
-const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE";
+const HF_TOKEN = process.env.HF_TOKEN; // <-- Make sure to add this in Render Environment Variables
+
+if (!HF_TOKEN) {
+  console.error("⚠️ HF_TOKEN not set! Please add it as environment variable.");
+}
 
 // ---------------------------------------
 // 🖼 TEXT → IMAGE (Stable Diffusion)
@@ -20,6 +23,7 @@ const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE";
 app.post("/tti", async (req, res) => {
   try {
     const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: "No prompt provided" });
 
     const response = await fetch(
       "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
@@ -53,6 +57,7 @@ app.post("/tti", async (req, res) => {
 app.post("/chat", async (req, res) => {
   try {
     const { text } = req.body;
+    if (!text) return res.status(400).json({ error: "No text provided" });
 
     const response = await fetch(
       "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
@@ -79,21 +84,19 @@ app.post("/chat", async (req, res) => {
 });
 
 // ---------------------------------------
-// 🔊 TEXT → SPEECH (Node.js using node-gtts)
+// 🔊 TEXT → SPEECH (Node.js gTTS)
 // ---------------------------------------
 app.post("/tts", async (req, res) => {
   try {
     const { text } = req.body;
-
-    if (!text)
-      return res.status(400).json({ error: "No text provided for TTS" });
+    if (!text) return res.status(400).json({ error: "No text provided for TTS" });
 
     const filename = `tts_${Date.now()}.mp3`;
-    const tts = nodeGtts("en");
+    const tts = new gTTS(text, "en");
 
-    tts.save(filename, text, (err) => {
+    tts.save(filename, (err) => {
       if (err) {
-        console.error("TTS error:", err);
+        console.error("gTTS error:", err);
         return res.status(500).json({ error: "TTS failed" });
       }
 
@@ -116,5 +119,5 @@ app.post("/tts", async (req, res) => {
 // ---------------------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Backend running on port ${PORT}`);
 });
