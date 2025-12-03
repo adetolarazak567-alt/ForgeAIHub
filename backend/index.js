@@ -1,17 +1,18 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import fs from "fs";
-import gTTS from "gtts";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Use environment variable for HuggingFace token
 const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
-// ================= TTI =================
+if(!HF_TOKEN) {
+  console.warn("HUGGINGFACE_TOKEN is not set in environment variables!");
+}
+
+// ------------------- TTI -------------------
 app.post("/tti", async (req, res) => {
   try {
     const { prompt, style, size } = req.body;
@@ -28,21 +29,20 @@ app.post("/tti", async (req, res) => {
       }
     );
 
-    if (!response.ok) {
-      return res.status(500).json({ error: "Image generation failed" });
-    }
+    if(!response.ok) return res.status(500).json({ error: "Image generation failed" });
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     res.setHeader("Content-Type", "image/png");
     res.send(buffer);
-  } catch (err) {
+
+  } catch(err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ================= CHAT =================
+// ------------------- CHAT -------------------
 app.post("/chat", async (req, res) => {
   try {
     const { text } = req.body;
@@ -60,43 +60,18 @@ app.post("/chat", async (req, res) => {
     );
 
     const data = await response.json();
-    const reply =
-      data?.generated_text ||
-      data?.[0]?.generated_text ||
-      "No response generated.";
-
+    const reply = data?.generated_text || data?.[0]?.generated_text || "No response generated.";
     res.json({ reply });
-  } catch (err) {
+
+  } catch(err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ================= TTS =================
-app.post("/tts", async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "No text provided" });
+// ------------------- PING -------------------
+app.get("/ping", (req,res) => res.send("pong"));
 
-    const filename = `tts_${Date.now()}.mp3`;
-    const tts = new gTTS(text, "en");
-
-    tts.save(filename, (err) => {
-      if (err) return res.status(500).json({ error: "TTS failed" });
-
-      res.sendFile(filename, { root: "." }, () => {
-        setTimeout(() => {
-          try {
-            fs.unlinkSync(filename);
-          } catch (e) {}
-        }, 1500);
-      });
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ================= START SERVER =================
+// ------------------- START SERVER -------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
