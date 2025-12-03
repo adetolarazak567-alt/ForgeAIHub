@@ -1,17 +1,18 @@
+
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import fs from "fs";
-import gTTS from "gtts";
+import nodeGtts from "node-gtts";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------------------------------
-// 🔑 ADD YOUR TOKEN HERE
+// 🔑 ADD YOUR HUGGINGFACE TOKEN HERE
 // ---------------------------------------
-const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE"; // <-- paste your token
+const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE";
 
 // ---------------------------------------
 // 🖼 TEXT → IMAGE (Stable Diffusion)
@@ -78,7 +79,7 @@ app.post("/chat", async (req, res) => {
 });
 
 // ---------------------------------------
-// 🔊 TEXT → SPEECH (Node.js gTTS)
+// 🔊 TEXT → SPEECH (Node.js using node-gtts)
 // ---------------------------------------
 app.post("/tts", async (req, res) => {
   try {
@@ -88,11 +89,11 @@ app.post("/tts", async (req, res) => {
       return res.status(400).json({ error: "No text provided for TTS" });
 
     const filename = `tts_${Date.now()}.mp3`;
-    const tts = new gTTS(text, "en");
+    const tts = nodeGtts("en");
 
-    tts.save(filename, (err) => {
+    tts.save(filename, text, (err) => {
       if (err) {
-        console.error("gTTS error:", err);
+        console.error("TTS error:", err);
         return res.status(500).json({ error: "TTS failed" });
       }
 
@@ -113,6 +114,7 @@ app.post("/tts", async (req, res) => {
 // ---------------------------------------
 // 🚀 START SERVER
 // ---------------------------------------
-app.listen(3000, () => {
-  console.log("Backend running on http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Backend running on http://localhost:${PORT}`);
 });
