@@ -8,14 +8,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ---------------------------------------
-// 🔑 USE ENVIRONMENT VARIABLE
-// ---------------------------------------
-const HF_TOKEN = process.env.HF_TOKEN; // <-- set this in Render environment variables
+// Use environment variable for HuggingFace token
+const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
-// ---------------------------------------
-// 🖼 TEXT → IMAGE
-// ---------------------------------------
+// ================= TTI =================
 app.post("/tti", async (req, res) => {
   try {
     const { prompt, style, size } = req.body;
@@ -46,9 +42,7 @@ app.post("/tti", async (req, res) => {
   }
 });
 
-// ---------------------------------------
-// 💬 CHATBOT
-// ---------------------------------------
+// ================= CHAT =================
 app.post("/chat", async (req, res) => {
   try {
     const { text } = req.body;
@@ -77,26 +71,19 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// ---------------------------------------
-// 🔊 TEXT → SPEECH (gTTS)
-// ---------------------------------------
+// ================= TTS =================
 app.post("/tts", async (req, res) => {
   try {
     const { text } = req.body;
-
     if (!text) return res.status(400).json({ error: "No text provided" });
 
     const filename = `tts_${Date.now()}.mp3`;
     const tts = new gTTS(text, "en");
 
     tts.save(filename, (err) => {
-      if (err) {
-        console.error("gTTS error:", err);
-        return res.status(500).json({ error: "TTS failed" });
-      }
+      if (err) return res.status(500).json({ error: "TTS failed" });
 
       res.sendFile(filename, { root: "." }, () => {
-        // Delete file after sending
         setTimeout(() => {
           try {
             fs.unlinkSync(filename);
@@ -109,10 +96,8 @@ app.post("/tts", async (req, res) => {
   }
 });
 
-// ---------------------------------------
-// 🚀 START SERVER
-// ---------------------------------------
+// ================= START SERVER =================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Backend running on port ${PORT}`);
 });
