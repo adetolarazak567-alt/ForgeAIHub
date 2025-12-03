@@ -2,25 +2,19 @@ import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import fs from "fs";
-import gTTS from "gtts.js";
+import gTTS from "gtts";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ---------------------------------------
-// 🔑 USE HUGGINGFACE TOKEN FROM ENV
-// ---------------------------------------
+// HuggingFace token for TTI and Chat
 const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
-if (!HF_TOKEN) console.warn("HUGGINGFACE_TOKEN is not set!");
 
-// ---------------------------------------
-// 🖼 TEXT → IMAGE (Stable Diffusion)
-// ---------------------------------------
+// ------------------- TTI (Text-to-Image) -------------------
 app.post("/tti", async (req, res) => {
   try {
-    const { prompt, style, size } = req.body;
-    if (!prompt) return res.status(400).json({ error: "No prompt provided" });
+    const { prompt } = req.body;
 
     const response = await fetch(
       "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
@@ -34,10 +28,7 @@ app.post("/tti", async (req, res) => {
       }
     );
 
-    if (!response.ok) {
-      const t = await response.text();
-      return res.status(500).json({ error: "Image generation failed: " + t });
-    }
+    if (!response.ok) return res.status(500).json({ error: "Image generation failed" });
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -49,16 +40,13 @@ app.post("/tti", async (req, res) => {
   }
 });
 
-// ---------------------------------------
-// 💬 CHATBOT (HuggingFace LLM)
-// ---------------------------------------
+// ------------------- CHAT -------------------
 app.post("/chat", async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "No text provided" });
 
     const response = await fetch(
-      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
+      "https://api-inference.huggingface.co/models/google/flan-t5-small",
       {
         method: "POST",
         headers: {
@@ -69,23 +57,20 @@ app.post("/chat", async (req, res) => {
       }
     );
 
-    if (!response.ok) {
-      const t = await response.text();
-      return res.status(500).json({ error: "Chat failed: " + t });
-    }
-
     const data = await response.json();
-    const reply = data?.generated_text || data?.[0]?.generated_text || "No response generated.";
+    const reply =
+      data?.generated_text ||
+      data?.[0]?.generated_text ||
+      "No reply generated.";
+
     res.json({ reply });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ---------------------------------------
-// 🔊 TEXT → SPEECH (gTTS)
-// ---------------------------------------
-app.post("/tts", async (req, res) => {
+// ------------------- TTS -------------------
+app.post("/tts", (req, res) => {
   try {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: "No text provided" });
@@ -94,10 +79,9 @@ app.post("/tts", async (req, res) => {
     const tts = new gTTS(text, "en");
 
     tts.save(filename, (err) => {
-      if (err) return res.status(500).json({ error: "TTS failed: " + err.message });
+      if (err) return res.status(500).json({ error: "TTS failed" });
 
       res.sendFile(filename, { root: "." }, () => {
-        // Delete after sending
         setTimeout(() => {
           try { fs.unlinkSync(filename); } catch (e) {}
         }, 1500);
@@ -108,15 +92,6 @@ app.post("/tts", async (req, res) => {
   }
 });
 
-// ---------------------------------------
-// 🚀 HEALTH CHECK
-// ---------------------------------------
-app.get("/ping", (req, res) => {
-  res.json({ status: "ok" });
-});
-
-// ---------------------------------------
-// 🚀 START SERVER
-// ---------------------------------------
+// ------------------- START SERVER -------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`ForgeAIHub backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
