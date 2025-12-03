@@ -1,106 +1,118 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import { exec } from "child_process"; // for gTTS
+import fs from "fs";
+import gTTS from "gtts";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------------------------------
-// 🔑 ADD YOUR TOKEN HERE
+// 🔑 USE ENVIRONMENT VARIABLE
 // ---------------------------------------
-const HF_TOKEN = "YOUR_HUGGINGFACE_ACCESS_TOKEN_HERE"; // <-- paste your token
+const HF_TOKEN = process.env.HF_TOKEN; // <-- set this in Render environment variables
 
 // ---------------------------------------
-// 🖼 TEXT → IMAGE (Stable Diffusion)
+// 🖼 TEXT → IMAGE
 // ---------------------------------------
-app.post("/api/tti", async (req, res) => {
-try {
-const { prompt } = req.body;
+app.post("/tti", async (req, res) => {
+  try {
+    const { prompt, style, size } = req.body;
 
-const response = await fetch(
-"https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
-{
-method: "POST",
-headers: {
-"Authorization": Bearer ${HF_TOKEN},
-"Content-Type": "application/json",
-},
-body: JSON.stringify({ inputs: prompt }),
-}
-);
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: prompt }),
+      }
+    );
 
-if (!response.ok) {
-return res.status(500).json({ error: "Image generation failed" });
-}
+    if (!response.ok) {
+      return res.status(500).json({ error: "Image generation failed" });
+    }
 
-const arrayBuffer = await response.arrayBuffer();
-const buffer = Buffer.from(arrayBuffer);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-res.setHeader("Content-Type", "image/png");
-res.send(buffer);
-
-} catch (err) {
-res.status(500).json({ error: err.message });
-}
+    res.setHeader("Content-Type", "image/png");
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------
-// 💬 CHATBOT (HuggingFace LLM)
+// 💬 CHATBOT
 // ---------------------------------------
-app.post("/api/chat", async (req, res) => {
-try {
-const { message } = req.body;
+app.post("/chat", async (req, res) => {
+  try {
+    const { text } = req.body;
 
-const response = await fetch(
-"https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
-{
-method: "POST",
-headers: {
-"Authorization": Bearer ${HF_TOKEN},
-"Content-Type": "application/json",
-},
-body: JSON.stringify({ inputs: message }),
-}
-);
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: text }),
+      }
+    );
 
-const data = await response.json();
-const reply = data?.generated_text || "I couldn't generate a response.";
+    const data = await response.json();
+    const reply =
+      data?.generated_text ||
+      data?.[0]?.generated_text ||
+      "No response generated.";
 
-res.json({ reply });
-
-} catch (err) {
-res.status(500).json({ error: err.message });
-}
+    res.json({ reply });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------
 // 🔊 TEXT → SPEECH (gTTS)
 // ---------------------------------------
-app.post("/api/tts", async (req, res) => {
-try {
-const { text } = req.body;
+app.post("/tts", async (req, res) => {
+  try {
+    const { text } = req.body;
 
-const filename = audio_${Date.now()}.mp3;
+    if (!text) return res.status(400).json({ error: "No text provided" });
 
-exec(gtts-cli "${text}" --output ${filename}, (err) => {
-if (err) return res.status(500).json({ error: err.message });
+    const filename = `tts_${Date.now()}.mp3`;
+    const tts = new gTTS(text, "en");
 
-res.sendFile(filename, { root: "." }, () => {
-// delete file after sending
-exec(rm ${filename});
-});
-});
+    tts.save(filename, (err) => {
+      if (err) {
+        console.error("gTTS error:", err);
+        return res.status(500).json({ error: "TTS failed" });
+      }
 
-} catch (err) {
-res.status(500).json({ error: err.message });
-}
+      res.sendFile(filename, { root: "." }, () => {
+        // Delete file after sending
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filename);
+          } catch (e) {}
+        }, 1500);
+      });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------
 // 🚀 START SERVER
 // ---------------------------------------
-app.listen(3000, () => {
-console.log("Backend running on http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Backend running on http://localhost:${PORT}`);
 });
