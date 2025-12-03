@@ -1,8 +1,8 @@
-
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import { exec } from "child_process"; // for gTTS
+import fs from "fs";
+import gTTS from "gtts";
 
 const app = express();
 app.use(cors());
@@ -25,7 +25,7 @@ app.post("/tti", async (req, res) => {
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
+          Authorization: `Bearer ${HF_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ inputs: prompt }),
@@ -41,14 +41,13 @@ app.post("/tti", async (req, res) => {
 
     res.setHeader("Content-Type", "image/png");
     res.send(buffer);
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ---------------------------------------
-// 💬 CHATBOT (HuggingFace LLM)
+// 💬 CHATBOT (HuggingFace GPT-like model)
 // ---------------------------------------
 app.post("/chat", async (req, res) => {
   try {
@@ -59,7 +58,7 @@ app.post("/chat", async (req, res) => {
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
+          Authorization: `Bearer ${HF_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ inputs: text }),
@@ -67,31 +66,45 @@ app.post("/chat", async (req, res) => {
     );
 
     const data = await response.json();
-    const reply = data?.generated_text || "No response generated.";
+    const reply =
+      data?.generated_text ||
+      data?.[0]?.generated_text ||
+      "No response generated.";
 
     res.json({ reply });
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ---------------------------------------
-// 🔊 TEXT → SPEECH (gTTS)
+// 🔊 TEXT → SPEECH (Node.js gTTS)
 // ---------------------------------------
 app.post("/tts", async (req, res) => {
   try {
     const { text } = req.body;
-    const filename = `audio_${Date.now()}.mp3`;
 
-    exec(`gtts-cli "${text}" --output ${filename}`, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
+    if (!text)
+      return res.status(400).json({ error: "No text provided for TTS" });
+
+    const filename = `tts_${Date.now()}.mp3`;
+    const tts = new gTTS(text, "en");
+
+    tts.save(filename, (err) => {
+      if (err) {
+        console.error("gTTS error:", err);
+        return res.status(500).json({ error: "TTS failed" });
+      }
 
       res.sendFile(filename, { root: "." }, () => {
-        exec(`rm ${filename}`);
+        // Delete file after sending
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(filename);
+          } catch (e) {}
+        }, 1500);
       });
     });
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
