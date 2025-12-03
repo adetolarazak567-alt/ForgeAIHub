@@ -1,18 +1,21 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import fs from "fs";
-import gTTS from "gtts";
+import { exec } from "child_process"; // for gTTS
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// HuggingFace token for TTI and Chat
-const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
+// ---------------------------------------
+// 🔑 ADD YOUR TOKEN HERE
+// ---------------------------------------
+const HF_TOKEN = "YOUR_HUGGINGFACE_TOKEN_HERE"; // <-- paste your token
 
-// ------------------- TTI (Text-to-Image) -------------------
-app.post("/tti", async (req, res) => {
+// ---------------------------------------
+// 🖼 TEXT → IMAGE (Stable Diffusion)
+// ---------------------------------------
+app.post("/api/tti", async (req, res) => {
   try {
     const { prompt } = req.body;
 
@@ -21,77 +24,83 @@ app.post("/tti", async (req, res) => {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
+          "Authorization": `Bearer ${HF_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ inputs: prompt }),
       }
     );
 
-    if (!response.ok) return res.status(500).json({ error: "Image generation failed" });
+    if (!response.ok) {
+      return res.status(500).json({ error: "Image generation failed" });
+    }
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     res.setHeader("Content-Type", "image/png");
     res.send(buffer);
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ------------------- CHAT -------------------
-app.post("/chat", async (req, res) => {
+// ---------------------------------------
+// 💬 CHATBOT (HuggingFace LLM)
+// ---------------------------------------
+app.post("/api/chat", async (req, res) => {
   try {
-    const { text } = req.body;
+    const { message } = req.body;
 
     const response = await fetch(
-      "https://api-inference.huggingface.co/models/google/flan-t5-small",
+      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
+          "Authorization": `Bearer ${HF_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ inputs: text }),
+        body: JSON.stringify({ inputs: message }),
       }
     );
 
     const data = await response.json();
-    const reply =
-      data?.generated_text ||
-      data?.[0]?.generated_text ||
-      "No reply generated.";
+    const reply = data?.generated_text || "I couldn't generate a response.";
 
     res.json({ reply });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ------------------- TTS -------------------
-app.post("/tts", (req, res) => {
+// ---------------------------------------
+// 🔊 TEXT → SPEECH (gTTS)
+// ---------------------------------------
+app.post("/api/tts", async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "No text provided" });
 
-    const filename = `tts_${Date.now()}.mp3`;
-    const tts = new gTTS(text, "en");
+    const filename = `audio_${Date.now()}.mp3`;
 
-    tts.save(filename, (err) => {
-      if (err) return res.status(500).json({ error: "TTS failed" });
+    exec(`gtts-cli "${text}" --output ${filename}`, (err) => {
+      if (err) return res.status(500).json({ error: err.message });
 
       res.sendFile(filename, { root: "." }, () => {
-        setTimeout(() => {
-          try { fs.unlinkSync(filename); } catch (e) {}
-        }, 1500);
+        // delete file after sending
+        exec(`rm ${filename}`);
       });
     });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ------------------- START SERVER -------------------
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+// ---------------------------------------
+// 🚀 START SERVER
+// ---------------------------------------
+app.listen(3000, () => {
+  console.log("Backend running on http://localhost:3000");
+});
