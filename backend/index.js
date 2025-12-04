@@ -1,93 +1,95 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import OpenAI from "openai";
+import fetch from "node-fetch";
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "20mb" }));
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
-/* ---------- TTS (Text → Speech) ---------- */
-app.post("/api/tts", async (req, res) => {
+if (!HF_TOKEN) {
+  console.error("❌ Missing HUGGINGFACE_TOKEN");
+  process.exit(1);
+}
+
+/* ------- HELPERS ------- */
+async function hfQuery(model, payload, isBlob = false) {
+  const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${HF_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    console.log(await res.text());
+    throw new Error("HF API failed");
+  }
+
+  return isBlob ? res.arrayBuffer() : res.json();
+}
+
+/* ------- TTS ------- */
+app.post("/tts", async (req, res) => {
   try {
     const { text } = req.body;
 
-    const audio = await client.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "alloy",
-      input: text
-    });
+    const audio = await hfQuery(
+      "facebook/fastspeech2-en-ljspeech",
+      { inputs: text },
+      true
+    );
 
-    const buffer = Buffer.from(await audio.arrayBuffer());
-
-    res.set({
-      "Content-Type": "audio/mpeg",
-      "Content-Length": buffer.length
-    });
-
-    res.send(buffer);
+    res.setHeader("Content-Type", "audio/wav");
+    res.send(Buffer.from(audio));
   } catch (err) {
-    console.log("TTS Error:", err);
-    res.status(500).json({ error: "TTS failed" });
+    res.status(500).send("TTS failed");
   }
 });
 
-/* ---------- TTI (Text → Image) ---------- */
-app.post("/api/tti", async (req, res) => {
+/* ------- TTI (Image Generation) ------- */
+app.post("/tti", async (req, res) => {
   try {
-    const { prompt, size } = req.body;
+    const { prompt } = req.body;
 
-    const img = await client.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size: `${size}x${size}`
-    });
+    const image = await hfQuery(
+      "stabilityai/stable-diffusion-2",
+      { inputs: prompt },
+      true
+    );
 
-    const base64 = img.data[0].b64_json;
-    const buffer = Buffer.from(base64, "base64");
-
-    res.set({
-      "Content-Type": "image/png",
-      "Content-Length": buffer.length
-    });
-
-    res.send(buffer);
+    res.setHeader("Content-Type", "image/png");
+    res.send(Buffer.from(image));
   } catch (err) {
-    console.log("TTI Error:", err);
-    res.status(500).json({ error: "Image generation failed" });
+    res.status(500).send("TTI failed");
   }
 });
 
-/* ---------- CHAT ---------- */
-app.post("/api/chat", async (req, res) => {
+/* ------- CHAT (Text Generation) ------- */
+app.post("/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const { text } = req.body;
 
-    const reply = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are ForgeAIHub assistant." },
-        { role: "user", content: message }
-      ]
-    });
+    const out = await hfQuery(
+      "mistralai/Mistral-7B-Instruct-v0.3",
+      { inputs: text }
+    );
 
-    res.json({ reply: reply.choices[0].message.content });
+    const reply =
+      out && out[0] && out[0].generated_text
+        ? out[0].generated_text
+        : "Couldn't generate a response";
+
+    res.json({ reply });
   } catch (err) {
-    console.log("Chat Error:", err);
-    res.status(500).json({ reply: "Chat failed" });
+    res.json({ reply: "Chat failed" });
   }
 });
 
-/* ---------- SERVER ---------- */
-app.get("/", (req, res) => {
-  res.send("ForgeAIHub backend running.");
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log("Backend live on " + PORT));
+app.listen(3000, () => console.log("Backend running on port 3000"));
