@@ -7,88 +7,81 @@ app.use(cors());
 app.use(express.json());
 
 const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
-if (!HF_TOKEN) console.log("❌ Missing HUGGINGFACE_TOKEN");
 
-// ----------------------------
-//  CHAT API
-// ----------------------------
-app.post("/api/chat", async (req, res) => {
+// ---------------------------
+// CHAT ENDPOINT
+// ---------------------------
+app.post("/chat", async (req, res) => {
   try {
-    const message = req.body.message || "";
+    const userMsg = req.body.message || "";
 
-    const r = await axios.post(
+    const response = await axios.post(
       "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
-      { inputs: message },
+      { inputs: userMsg },
       {
-        headers: { Authorization: `Bearer ${HF_TOKEN}` }
+        headers: { Authorization: `Bearer ${HF_TOKEN}` },
       }
     );
 
-    const reply = r.data[0]?.generated_text || "I could not generate a reply.";
-    res.json({ reply });
+    res.json({ response: response.data[0].generated_text });
   } catch (err) {
-    console.log("CHAT ERROR:", err.response?.data || err.message);
-    res.status(500).json({ reply: "Chat generation failed" });
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "Chat generation failed" });
   }
 });
 
-// ----------------------------
-//  TEXT → SPEECH (TTS)
-// ----------------------------
-app.post("/api/tts", async (req, res) => {
+// ---------------------------
+// TEXT → SPEECH ENDPOINT
+// ---------------------------
+app.post("/tts", async (req, res) => {
   try {
     const text = req.body.text || "Hello";
 
-    const r = await axios.post(
+    const response = await axios.post(
       "https://api-inference.huggingface.co/models/facebook/fastspeech2-en-ljspeech",
       { inputs: text },
       {
         headers: {
           Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        responseType: "arraybuffer"
+        responseType: "arraybuffer",
       }
     );
 
     res.setHeader("Content-Type", "audio/wav");
-    res.send(r.data);
+    res.send(response.data);
   } catch (err) {
-    console.log("TTS ERROR:", err.response?.data || err.message);
-    res.status(500).send("Failed to generate audio");
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "TTS generation failed" });
   }
 });
 
-// ----------------------------
-//  TEXT → IMAGE (TTI)
-// ----------------------------
-app.post("/api/tti", async (req, res) => {
+// ---------------------------
+// TEXT → IMAGE ENDPOINT
+// ---------------------------
+app.post("/tti", async (req, res) => {
   try {
-    const { prompt, style, size } = req.body;
+    const prompt = req.body.prompt || "A landscape";
 
-    const fullPrompt = `${prompt}. Style: ${style}.`;
-
-    const r = await axios.post(
-      "https://api-inference.huggingface.co/models/prompthero/openjourney",
-      { inputs: fullPrompt, parameters: { width: size, height: size } },
+    const response = await axios.post(
+      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+      { inputs: prompt },
       {
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          Accept: "image/png"
-        },
-        responseType: "arraybuffer"
+        headers: { Authorization: `Bearer ${HF_TOKEN}` },
+        responseType: "arraybuffer",
       }
     );
 
     res.setHeader("Content-Type", "image/png");
-    res.send(r.data);
+    res.send(response.data);
   } catch (err) {
-    console.log("TTI ERROR:", err.response?.data || err.message);
-    res.status(500).send("Image generation failed");
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "Image generation failed" });
   }
 });
 
-// ----------------------------
-//  START SERVER
-// ----------------------------
-app.listen(3000, () => console.log("🚀 Backend running on port 3000"));
+// ---------------------------
+// SERVER START
+// ---------------------------
+app.listen(3000, () => console.log("Backend running on port 3000"));
