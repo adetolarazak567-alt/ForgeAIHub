@@ -1,95 +1,67 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import fetch from "node-fetch";
-
-dotenv.config();
+import axios from "axios";
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json());
 
 const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
 if (!HF_TOKEN) {
-  console.error("❌ Missing HUGGINGFACE_TOKEN");
-  process.exit(1);
+  console.log("❌ HUGGINGFACE_TOKEN NOT FOUND");
 }
 
-/* ------- HELPERS ------- */
-async function hfQuery(model, payload, isBlob = false) {
-  const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${HF_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!res.ok) {
-    console.log(await res.text());
-    throw new Error("HF API failed");
-  }
-
-  return isBlob ? res.arrayBuffer() : res.json();
-}
-
-/* ------- TTS ------- */
-app.post("/tts", async (req, res) => {
+// ---------------------------
+// CHAT ENDPOINT
+// ---------------------------
+app.post("/chat", async (req, res) => {
   try {
-    const { text } = req.body;
+    const userMsg = req.body.message || "";
 
-    const audio = await hfQuery(
-      "facebook/fastspeech2-en-ljspeech",
-      { inputs: text },
-      true
+    const response = await axios.post(
+      "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
+      { inputs: userMsg },
+      {
+        headers: { Authorization: `Bearer ${HF_TOKEN}` },
+      }
+    );
+
+    res.json({ response: response.data[0].generated_text });
+  } catch (err) {
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "Chat generation failed" });
+  }
+});
+
+// ---------------------------
+// TEXT → SPEECH ENDPOINT
+// ---------------------------
+app.get("/text-to-speech", async (req, res) => {
+  try {
+    const text = req.query.text || "Hello";
+
+    const response = await axios.post(
+      "https://api-inference.huggingface.co/models/facebook/fastspeech2-en-ljspeech",
+      text,
+      {
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "arraybuffer",
+      }
     );
 
     res.setHeader("Content-Type", "audio/wav");
-    res.send(Buffer.from(audio));
+    res.send(response.data);
   } catch (err) {
-    res.status(500).send("TTS failed");
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "TTS generation failed" });
   }
 });
 
-/* ------- TTI (Image Generation) ------- */
-app.post("/tti", async (req, res) => {
-  try {
-    const { prompt } = req.body;
-
-    const image = await hfQuery(
-      "stabilityai/stable-diffusion-2",
-      { inputs: prompt },
-      true
-    );
-
-    res.setHeader("Content-Type", "image/png");
-    res.send(Buffer.from(image));
-  } catch (err) {
-    res.status(500).send("TTI failed");
-  }
-});
-
-/* ------- CHAT (Text Generation) ------- */
-app.post("/chat", async (req, res) => {
-  try {
-    const { text } = req.body;
-
-    const out = await hfQuery(
-      "mistralai/Mistral-7B-Instruct-v0.3",
-      { inputs: text }
-    );
-
-    const reply =
-      out && out[0] && out[0].generated_text
-        ? out[0].generated_text
-        : "Couldn't generate a response";
-
-    res.json({ reply });
-  } catch (err) {
-    res.json({ reply: "Chat failed" });
-  }
-});
-
+// ---------------------------
+// SERVER START
+// ---------------------------
 app.listen(3000, () => console.log("Backend running on port 3000"));
