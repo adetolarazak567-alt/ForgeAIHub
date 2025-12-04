@@ -1,106 +1,93 @@
 import express from "express";
-import fetch from "node-fetch";
 import cors from "cors";
-import { exec } from "child_process"; // for gTTS
+import dotenv from "dotenv";
+import OpenAI from "openai";
+
+dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
-// ---------------------------------------
-// 🔑 ADD YOUR TOKEN HERE
-// ---------------------------------------
-const HF_TOKEN = "YOUR_HUGGINGFACE_TOKEN_HERE"; // <-- paste your token
-
-// ---------------------------------------
-// 🖼 TEXT → IMAGE (Stable Diffusion)
-// ---------------------------------------
-app.post("/api/tti", async (req, res) => {
-  try {
-    const { prompt } = req.body;
-
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: prompt }),
-      }
-    );
-
-    if (!response.ok) {
-      return res.status(500).json({ error: "Image generation failed" });
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    res.setHeader("Content-Type", "image/png");
-    res.send(buffer);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// ---------------------------------------
-// 💬 CHATBOT (HuggingFace LLM)
-// ---------------------------------------
-app.post("/api/chat", async (req, res) => {
-  try {
-    const { message } = req.body;
-
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: message }),
-      }
-    );
-
-    const data = await response.json();
-    const reply = data?.generated_text || "I couldn't generate a response.";
-
-    res.json({ reply });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---------------------------------------
-// 🔊 TEXT → SPEECH (gTTS)
-// ---------------------------------------
+/* ---------- TTS (Text → Speech) ---------- */
 app.post("/api/tts", async (req, res) => {
   try {
     const { text } = req.body;
 
-    const filename = `audio_${Date.now()}.mp3`;
-
-    exec(`gtts-cli "${text}" --output ${filename}`, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-
-      res.sendFile(filename, { root: "." }, () => {
-        // delete file after sending
-        exec(`rm ${filename}`);
-      });
+    const audio = await client.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: "alloy",
+      input: text
     });
 
+    const buffer = Buffer.from(await audio.arrayBuffer());
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Content-Length": buffer.length
+    });
+
+    res.send(buffer);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.log("TTS Error:", err);
+    res.status(500).json({ error: "TTS failed" });
   }
 });
 
-// ---------------------------------------
-// 🚀 START SERVER
-// ---------------------------------------
-app.listen(3000, () => {
-  console.log("Backend running on http://localhost:3000");
+/* ---------- TTI (Text → Image) ---------- */
+app.post("/api/tti", async (req, res) => {
+  try {
+    const { prompt, size } = req.body;
+
+    const img = await client.images.generate({
+      model: "gpt-image-1",
+      prompt,
+      size: `${size}x${size}`
+    });
+
+    const base64 = img.data[0].b64_json;
+    const buffer = Buffer.from(base64, "base64");
+
+    res.set({
+      "Content-Type": "image/png",
+      "Content-Length": buffer.length
+    });
+
+    res.send(buffer);
+  } catch (err) {
+    console.log("TTI Error:", err);
+    res.status(500).json({ error: "Image generation failed" });
+  }
 });
+
+/* ---------- CHAT ---------- */
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    const reply = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are ForgeAIHub assistant." },
+        { role: "user", content: message }
+      ]
+    });
+
+    res.json({ reply: reply.choices[0].message.content });
+  } catch (err) {
+    console.log("Chat Error:", err);
+    res.status(500).json({ reply: "Chat failed" });
+  }
+});
+
+/* ---------- SERVER ---------- */
+app.get("/", (req, res) => {
+  res.send("ForgeAIHub backend running.");
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log("Backend live on " + PORT));
