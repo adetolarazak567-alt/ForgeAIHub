@@ -1,106 +1,99 @@
 import express from "express";
 import cors from "cors";
-import axios from "axios";
+import fetch from "node-fetch";
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
 
-const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
-
-/* ============================================
-   WORKING MODELS (STABLE & SUPPORTED BY HF)
-   ============================================ */
-
-// CHAT MODEL – works perfectly with text inputs
-const CHAT_MODEL = "mistralai/Mistral-7B-Instruct-v0.2";
-
-// TTS MODEL – returns audio/wav directly
-const TTS_MODEL = "espnet/kan-bayashi_ljspeech_vits";
-
-// TEXT → IMAGE MODEL – works with REST
-const TTI_MODEL = "stabilityai/sdxl-turbo";
-
-
-/* ============================================
-   CHAT ENDPOINT
-   ============================================ */
-app.post("/chat", async (req, res) => {
-  try {
-    const message = req.body.message || "";
-
-    const response = await axios.post(
-      `https://api-inference.huggingface.co/models/${CHAT_MODEL}`,
-      { inputs: message },
-      { headers: { Authorization: `Bearer ${HF_TOKEN}` } }
-    );
-
-    const text = response.data[0]?.generated_text || "No response";
-
-    res.json({ response: text });
-  } catch (err) {
-    console.log(err.response?.data || err.message);
-    res.status(500).json({ error: "Chat generation failed" });
-  }
-});
-
-
-/* ============================================
-   TEXT → SPEECH ENDPOINT
-   ============================================ */
+/* ---------------------------
+   FREE TEXT TO SPEECH (TTS)
+   Using: espnet/kan-bayashi_ljspeech_vits
+---------------------------- */
 app.post("/tts", async (req, res) => {
   try {
-    const text = req.body.text || "Hello world";
+    const { text } = req.body;
 
-    const response = await axios.post(
-      `https://api-inference.huggingface.co/models/${TTS_MODEL}`,
-      { inputs: text },
+    const r = await fetch(
+      "https://api-inference.huggingface.co/models/espnet/kan-bayashi_ljspeech_vits",
       {
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        responseType: "arraybuffer",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs: text })
       }
     );
 
-    res.setHeader("Content-Type", "audio/wav");
-    res.send(response.data);
+    if (!r.ok) return res.status(500).send("TTS generation failed.");
+
+    const audio = await r.arrayBuffer();
+    res.set("Content-Type", "audio/wav");
+    res.send(Buffer.from(audio));
   } catch (err) {
-    console.log(err.response?.data || err.message);
-    res.status(500).json({ error: "TTS generation failed" });
+    res.status(500).send("TTS error");
   }
 });
 
-
-/* ============================================
-   TEXT → IMAGE ENDPOINT
-   ============================================ */
+/* ---------------------------
+   FREE TEXT → IMAGE (TTI)
+   Using: stabilityai/stable-diffusion-2-1
+---------------------------- */
 app.post("/tti", async (req, res) => {
   try {
-    const prompt = req.body.prompt || "A beautiful landscape";
+    const { prompt } = req.body;
 
-    const response = await axios.post(
-      `https://api-inference.huggingface.co/models/${TTI_MODEL}`,
-      { inputs: prompt },
+    const r = await fetch(
+      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
       {
-        headers: { Authorization: `Bearer ${HF_TOKEN}` },
-        responseType: "arraybuffer",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs: prompt })
       }
     );
 
-    res.setHeader("Content-Type", "image/png");
-    res.send(response.data);
+    if (!r.ok) return res.status(500).send("Image generation failed.");
+
+    const img = await r.arrayBuffer();
+    res.set("Content-Type", "image/png");
+    res.send(Buffer.from(img));
   } catch (err) {
-    console.log(err.response?.data || err.message);
-    res.status(500).json({ error: "Image generation failed" });
+    res.status(500).send("TTI error");
   }
 });
 
+/* ---------------------------
+   FREE AI CHAT ASSISTANT
+   Using: HuggingFace Zephyr-7B
+---------------------------- */
+app.post("/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
 
-/* ============================================
+    const r = await fetch(
+      "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inputs: message,
+          parameters: { max_new_tokens: 150 }
+        })
+      }
+    );
+
+    const j = await r.json();
+
+    if (!j || !j[0] || !j[0].generated_text)
+      return res.json({ response: "No response" });
+
+    const reply = j[0].generated_text;
+    res.json({ response: reply });
+  } catch (err) {
+    res.json({ response: "Chat error" });
+  }
+});
+
+/* ---------------------------
    SERVER START
-   ============================================ */
-app.listen(3000, () =>
-  console.log("ForgeAIHub backend is running on port 3000 🚀")
-);
+---------------------------- */
+app.get("/", (_, res) => res.send("ForgeAIHub backend running ✔"));
+app.listen(3000, () => console.log("Server running on port 3000"));
