@@ -1,106 +1,87 @@
 import express from "express";
-import fetch from "node-fetch";
 import cors from "cors";
-import { exec } from "child_process"; // for gTTS
+import axios from "axios";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ---------------------------------------
-// 🔑 ADD YOUR TOKEN HERE
-// ---------------------------------------
-const HF_TOKEN = "YOUR_HUGGINGFACE_TOKEN_HERE"; // <-- paste your token
+const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
-// ---------------------------------------
-// 🖼 TEXT → IMAGE (Stable Diffusion)
-// ---------------------------------------
-app.post("/api/tti", async (req, res) => {
+// ---------------------------
+// CHAT ENDPOINT
+// ---------------------------
+app.post("/chat", async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const userMsg = req.body.message || "";
 
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+    const response = await axios.post(
+      "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
+      { inputs: userMsg },
       {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: prompt }),
+        headers: { Authorization: `Bearer ${HF_TOKEN}` },
       }
     );
 
-    if (!response.ok) {
-      return res.status(500).json({ error: "Image generation failed" });
-    }
+    res.json({ response: response.data[0].generated_text });
+  } catch (err) {
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "Chat generation failed" });
+  }
+});
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+// ---------------------------
+// TEXT → SPEECH ENDPOINT
+// ---------------------------
+app.post("/tts", async (req, res) => {
+  try {
+    const text = req.body.text || "Hello";
+
+    const response = await axios.post(
+      "https://api-inference.huggingface.co/models/facebook/fastspeech2-en-ljspeech",
+      { inputs: text },
+      {
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        responseType: "arraybuffer",
+      }
+    );
+
+    res.setHeader("Content-Type", "audio/wav");
+    res.send(response.data);
+  } catch (err) {
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "TTS generation failed" });
+  }
+});
+
+// ---------------------------
+// TEXT → IMAGE ENDPOINT
+// ---------------------------
+app.post("/tti", async (req, res) => {
+  try {
+    const prompt = req.body.prompt || "A landscape";
+
+    const response = await axios.post(
+      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+      { inputs: prompt },
+      {
+        headers: { Authorization: `Bearer ${HF_TOKEN}` },
+        responseType: "arraybuffer",
+      }
+    );
 
     res.setHeader("Content-Type", "image/png");
-    res.send(buffer);
-
+    res.send(response.data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.log(err.response?.data || err.message);
+    res.status(500).json({ error: "Image generation failed" });
   }
 });
 
-// ---------------------------------------
-// 💬 CHATBOT (HuggingFace LLM)
-// ---------------------------------------
-app.post("/api/chat", async (req, res) => {
-  try {
-    const { message } = req.body;
-
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: message }),
-      }
-    );
-
-    const data = await response.json();
-    const reply = data?.generated_text || "I couldn't generate a response.";
-
-    res.json({ reply });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---------------------------------------
-// 🔊 TEXT → SPEECH (gTTS)
-// ---------------------------------------
-app.post("/api/tts", async (req, res) => {
-  try {
-    const { text } = req.body;
-
-    const filename = `audio_${Date.now()}.mp3`;
-
-    exec(`gtts-cli "${text}" --output ${filename}`, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-
-      res.sendFile(filename, { root: "." }, () => {
-        // delete file after sending
-        exec(`rm ${filename}`);
-      });
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---------------------------------------
-// 🚀 START SERVER
-// ---------------------------------------
-app.listen(3000, () => {
-  console.log("Backend running on http://localhost:3000");
-});
+// ---------------------------
+// SERVER START
+// ---------------------------
+app.listen(3000, () => console.log("Backend running on port 3000"));
