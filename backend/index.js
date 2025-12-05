@@ -7,7 +7,7 @@ app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
 /* ---------------------------
-   FREE TEXT TO SPEECH (TTS)
+   FREE TEXT TO SPEECH (TTS) 
    Using: espnet/kan-bayashi_ljspeech_vits
 ---------------------------- */
 app.post("/tts", async (req, res) => {
