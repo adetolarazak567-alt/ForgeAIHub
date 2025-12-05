@@ -8,31 +8,33 @@ app.use(express.json());
 
 const HF_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
-// ---------------------------
-// CHAT ENDPOINT
-// ---------------------------
+/* =============== CHAT ================= */
 app.post("/chat", async (req, res) => {
   try {
     const userMsg = req.body.message || "";
 
     const response = await axios.post(
-      "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
-      { inputs: userMsg },
+      "https://api-inference.huggingface.co/v1/chat/completions",
       {
-        headers: { Authorization: `Bearer ${HF_TOKEN}` },
+        model: "microsoft/DialoGPT-large",
+        messages: [{ role: "user", content: userMsg }]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
     );
 
-    res.json({ response: response.data[0].generated_text });
+    res.json({ response: response.data.choices[0].message.content });
   } catch (err) {
-    console.log(err.response?.data || err.message);
+    console.log("Chat ERR:", err.response?.data || err.message);
     res.status(500).json({ error: "Chat generation failed" });
   }
 });
 
-// ---------------------------
-// TEXT → SPEECH ENDPOINT
-// ---------------------------
+/* =============== TEXT → SPEECH ================= */
 app.post("/tts", async (req, res) => {
   try {
     const text = req.body.text || "Hello";
@@ -43,23 +45,21 @@ app.post("/tts", async (req, res) => {
       {
         headers: {
           Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
-        responseType: "arraybuffer",
+        responseType: "arraybuffer"
       }
     );
 
     res.setHeader("Content-Type", "audio/wav");
     res.send(response.data);
   } catch (err) {
-    console.log(err.response?.data || err.message);
+    console.log("TTS ERR:", err.response?.data || err.message);
     res.status(500).json({ error: "TTS generation failed" });
   }
 });
 
-// ---------------------------
-// TEXT → IMAGE ENDPOINT
-// ---------------------------
+/* =============== TEXT → IMAGE ================= */
 app.post("/tti", async (req, res) => {
   try {
     const prompt = req.body.prompt || "A landscape";
@@ -68,20 +68,19 @@ app.post("/tti", async (req, res) => {
       "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
       { inputs: prompt },
       {
-        headers: { Authorization: `Bearer ${HF_TOKEN}` },
-        responseType: "arraybuffer",
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`
+        },
+        responseType: "arraybuffer"
       }
     );
 
     res.setHeader("Content-Type", "image/png");
     res.send(response.data);
   } catch (err) {
-    console.log(err.response?.data || err.message);
+    console.log("TTI ERR:", err.response?.data || err.message);
     res.status(500).json({ error: "Image generation failed" });
   }
 });
 
-// ---------------------------
-// SERVER START
-// ---------------------------
 app.listen(3000, () => console.log("Backend running on port 3000"));
