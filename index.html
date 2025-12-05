@@ -3,271 +3,352 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>ForgeAIHub — TTS, TTI & Chat</title>
+<title>ForgeAIHub — AI Tools (TTS, TTI & Chat)</title>
+
 <style>
-  :root{--accent:#007bff;--bg:#f5f9ff}
-  body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Poppins",sans-serif;margin:0;background:linear-gradient(135deg,#eaf6ff,#fbfdff);padding:28px}
+  :root{
+    --accent:#0066ff;
+    --accent-dark:#004bd1;
+    --bg:#f3f7ff;
+    --card:#ffffff;
+    --radius:16px;
+    --cancel:#eef3ff;
+  }
+
+  body{
+    font-family:Inter,system-ui,-apple-system,"Poppins",sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#e7f1ff,#f8fbff);
+    color:#1a1a1a;
+    padding:20px;
+  }
+
   .wrap{max-width:1100px;margin:0 auto}
-  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-  header h1{color:var(--accent);margin:0;font-size:1.2rem}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:900px){.grid{grid-template-columns:1fr}}
-  .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 8px 28px rgba(10,20,40,.06)}
-  label{display:block;margin-top:8px;margin-bottom:6px;font-weight:600;font-size:0.95rem}
-  textarea,input,select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6edf6;font-size:0.95rem}
-  .row{display:flex;gap:8px;align-items:center}
-  .btn{background:var(--accent);color:#fff;border:none;padding:9px 12px;border-radius:8px;cursor:pointer;font-weight:700}
-  .btn.secondary{background:#f2f5fb;color:#222}
-  .out{margin-top:10px}
-  .loader{width:34px;height:34px;border-radius:50%;border:4px solid #eef2f7;border-top-color:var(--accent);animation:spin .9s linear infinite;display:inline-block}
+
+  header{
+    padding:8px 0;
+    margin-bottom:24px;
+    text-align:center;
+  }
+  header h1{margin:0;font-size:1.9rem;font-weight:800;color:#0054e6;}
+  header p{margin:4px 0 0;color:#4e5d78;font-size:1rem;}
+
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+  }
+  @media(max-width:920px){ .grid{grid-template-columns:1fr} }
+
+  .card{
+    background:var(--card);
+    padding:20px;
+    border-radius:var(--radius);
+    box-shadow:0 8px 30px rgba(0,0,0,0.06);
+  }
+
+  label{font-weight:600;margin-bottom:6px;display:block;font-size:0.95rem;}
+  textarea,input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #d9e3f3;font-size:1rem;background:#f9fbff;}
+
+  .btn{
+    background:var(--accent);
+    color:white;
+    padding:10px 16px;
+    border:none;
+    font-weight:600;
+    border-radius:10px;
+    cursor:pointer;
+    transition:0.2s;
+  }
+  .btn:hover{background:var(--accent-dark)}
+  .btn.secondary{background:#eef3ff;color:#222;}
+  .btn.red{background:#eef3ff;color:#222;}
+
+  .controls{display:flex;gap:10px;align-items:center;margin-top:12px;}
+  .loader{width:28px;height:28px;border-radius:50%;border:4px solid #e5e9f5;border-top-color:var(--accent);animation:spin 1s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .media{display:flex;flex-direction:column;gap:8px}
-  audio{width:100%}
-  img.thumb{max-width:100%;border-radius:8px;border:1px solid #edf5ff}
-  .chat-area{height:300px;overflow:auto;border-radius:8px;padding:8px;border:1px solid #eef5ff;background:#fbfdff}
-  .msg{padding:8px;border-radius:8px;margin:8px 0;max-width:85%}
-  .msg.user{background:#e6f2ff;margin-left:auto;color:#033}
-  .msg.bot{background:#f2f5fb;color:#033}
-  .controls{display:flex;gap:8px;align-items:center;margin-top:10px}
-  footer{margin-top:18px;text-align:center;color:#666}
+
+  .out{margin-top:12px}
+
+  .chat-area{
+    height:320px;
+    overflow-y:auto;
+    border:1px solid #e1e8f5;
+    border-radius:var(--radius);
+    background:#fafcff;
+    padding:12px;
+  }
+
+  .msg{
+    padding:10px 12px;
+    border-radius:12px;
+    margin:8px 0;
+    max-width:85%;
+    line-height:1.4;
+  }
+  .msg.user{background:#e3f0ff;margin-left:auto;}
+  .msg.bot{background:#eef2f7;}
+
+  .chat-input-wrap{position:relative;display:flex;align-items:center;}
+  #chatInput{flex:1;padding-right:36px;border-radius:10px;border:1px solid #d9e3f3;}
+  #clearChatInput{
+    position:absolute;
+    right:10px;
+    background:var(--cancel);
+    border:none;
+    border-radius:50%;
+    width:24px;
+    height:24px;
+    text-align:center;
+    cursor:pointer;
+    font-weight:bold;
+    display:none;
+  }
+
+  footer{margin-top:26px;text-align:center;padding:10px 0;color:#667;font-size:0.9rem;}
 </style>
 </head>
+
 <body>
 <div class="wrap">
+
   <header>
-    <h1>ForgeAIHub — TTS, TTI & Chat</h1>
-    <div id="workerUrlPreview" style="color:#666;font-size:0.9rem">Backend: not set</div>
+    <h1>ForgeAIHub</h1>
+    <p>Your free AI Toolkit — Text-to-Speech, Text-to-Image and AI Chat</p>
   </header>
 
   <div class="grid">
-    <!-- TTS -->
-    <section class="card" aria-label="Text to Speech">
-      <h3>TTS — Text → Speech</h3>
-      <label for="ttsText">Text</label>
-      <textarea id="ttsText" rows="5">Welcome to ForgeAIHub — demo voice.</textarea>
 
-      <div class="row" style="margin-top:8px">
-        <div style="flex:1">
-          <label for="voiceSelect">Voice</label>
-          <select id="voiceSelect">
-            <option>Joanna</option>
-            <option>Matthew</option>
-            <option>Kimberly</option>
-            <option>Justin</option>
-            <option>Salli</option>
-          </select>
-        </div>
-        <div style="width:120px">
-          <label for="speed">Speed</label>
-          <select id="speed"><option value="0.8">Slow</option><option value="1" selected>Normal</option><option value="1.25">Fast</option></select>
-        </div>
-      </div>
+    <!-- TTS -->
+    <section class="card">
+      <h3>🔊 Text to Speech (TTS)</h3>
+
+      <label for="ttsText">Text</label>
+      <textarea id="ttsText" rows="5">Welcome to ForgeAIHub!</textarea>
+
+      <label>Voice</label>
+      <select id="voiceSelect">
+        <option>Joanna</option>
+        <option>Matthew</option>
+        <option>Kimberly</option>
+        <option>Justin</option>
+        <option>Salli</option>
+      </select>
+
+      <label>Speed</label>
+      <select id="speed">
+        <option value="0.8">Slow</option>
+        <option value="1" selected>Normal</option>
+        <option value="1.25">Fast</option>
+      </select>
 
       <div class="controls">
         <button id="genTtsBtn" class="btn">Generate</button>
         <button id="stopTtsBtn" class="btn secondary">Stop</button>
-        <div id="ttsSpinner" style="margin-left:auto;display:none"><span class="loader"></span></div>
+        <button id="clearTtsBtn" class="btn red">Clear</button>
+        <div id="ttsSpinner" style="display:none"><div class="loader"></div></div>
       </div>
 
       <div id="ttsOut" class="out"></div>
     </section>
 
     <!-- TTI -->
-    <section class="card" aria-label="Text to Image">
-      <h3>TTI — Text → Image</h3>
+    <section class="card">
+      <h3>🖼️ Text to Image (TTI)</h3>
+
       <label for="imgPrompt">Prompt</label>
-      <textarea id="imgPrompt" rows="4">A minimal flat-lay of coffee and notebook, soft morning lighting.</textarea>
+      <textarea id="imgPrompt" rows="4">A flat-lay of coffee and notebook, soft light.</textarea>
 
-      <label for="styleSel">Style</label>
-      <select id="styleSel"><option value="photorealistic">Photorealistic</option><option value="digital-painting">Digital painting</option><option value="vector">Vector / flat</option></select>
+      <label>Style</label>
+      <select id="styleSel">
+        <option value="photorealistic">Photorealistic</option>
+        <option value="digital-painting">Digital Painting</option>
+        <option value="vector">Vector / Flat</option>
+      </select>
 
-      <label for="sizeSel">Size</label>
-      <select id="sizeSel"><option value="512">512×512</option><option value="768">768×768</option><option value="1024">1024×1024</option></select>
+      <label>Size</label>
+      <select id="sizeSel">
+        <option value="512">512×512</option>
+        <option value="768">768×768</option>
+        <option value="1024">1024×1024</option>
+      </select>
 
       <div class="controls">
         <button id="genImgBtn" class="btn">Generate Image</button>
         <button id="clearImgBtn" class="btn secondary">Clear</button>
-        <div id="imgSpinner" style="margin-left:auto;display:none"><span class="loader"></span></div>
+        <div id="imgSpinner" style="display:none"><div class="loader"></div></div>
       </div>
 
       <div id="imgOut" class="out"></div>
     </section>
   </div>
 
-  <!-- Chat -->
-  <div style="margin-top:14px" class="card">
-    <h3>Chatbot</h3>
+  <!-- Chat Section -->
+  <div class="card" style="margin-top:22px">
+    <h3>💬 AI Chat Assistant</h3>
+
     <div id="chatArea" class="chat-area"></div>
 
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <input id="chatInput" placeholder="Type your message..." style="flex:1;padding:10px;border-radius:8px;border:1px solid #e6edf6"/>
+    <div class="chat-input-wrap" style="margin-top:10px">
+      <input id="chatInput" placeholder="Type your message here..." />
+      <button id="clearChatInput">×</button>
+    </div>
+
+    <div class="controls">
       <button id="sendChatBtn" class="btn">Send</button>
+      <button id="clearChatBtn" class="btn red">Clear Chat</button>
     </div>
   </div>
 
-  <footer> @ ForgeAIHub 2025. All rights reserved </footer>
+  <footer>© ForgeAIHub 2025 — AI Tools for Everyone</footer>
+
 </div>
 
 <script>
-/* ====== CONFIG — set this to your deployed backend URL ====== */
-const BACKEND_URL = "https://forgeaihub-4.onrender.com"; // <-- your Node.js backend
-document.getElementById('workerUrlPreview').textContent = BACKEND_URL;
+const BACKEND_URL = "https://forgeaihub-5.onrender.com"; 
 
-/* ====== HELPERS ====== */
-function show(el, yes=true){ el.style.display = yes ? '' : 'none'; }
-function blobToUrl(blob){ return URL.createObjectURL(blob); }
+/* Helpers */
+const show = (el, ok=true)=> el.style.display = ok ? '' : 'none';
+const blobToUrl = b => URL.createObjectURL(b);
 
-/* ====== TTS (gTTS) ====== */
-const genTtsBtn = document.getElementById('genTtsBtn');
-const ttsText = document.getElementById('ttsText');
+/* ===== TTS ===== */
+let activeAudio = null;
 const ttsOut = document.getElementById('ttsOut');
 const ttsSpinner = document.getElementById('ttsSpinner');
-const stopTtsBtn = document.getElementById('stopTtsBtn');
-let activeAudio = null;
 
-genTtsBtn.addEventListener('click', async () => {
-  const text = ttsText.value.trim();
-  if(!text){ alert('Enter text'); return; }
-  show(ttsSpinner,true);
-  ttsOut.innerHTML='';
+document.getElementById('genTtsBtn').onclick = async () => {
+  const text = document.getElementById('ttsText').value.trim();
+  if (!text) return alert("Enter text");
+  ttsOut.innerHTML = "";
+  show(ttsSpinner, true);
 
   try {
-    // Send text to backend
-    const resp = await fetch(`${BACKEND_URL}/tts`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+    const r = await fetch(`${BACKEND_URL}/tts`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ text })
     });
-    if(!resp.ok){ 
-      const t = await resp.text(); 
-      ttsOut.innerHTML=`<div style="color:#b00">Error: ${t}</div>`; 
-      return; 
-    }
-    const blob = await resp.blob();
-    const url = blobToUrl(blob);
-
-    // Create audio element
-    const audio = document.createElement('audio');
-    audio.controls = true;
-    audio.src = url;
-    audio.autoplay = true;
-    ttsOut.appendChild(audio);
-
-    // Download button
-    const dl = document.createElement('button');
-    dl.className='btn secondary';
-    dl.textContent='Download audio';
-    dl.onclick=()=>{ 
-      const a=document.createElement('a'); 
-      a.href=url; 
-      a.download='speech.mp3'; 
-      a.click(); 
-    };
-    ttsOut.appendChild(dl);
-
-    activeAudio = audio;
-  } catch(err){
-    ttsOut.innerHTML=`<div style="color:#b00">Network error: ${err.message}</div>`;
-  } finally { show(ttsSpinner,false); }
-});
-
-stopTtsBtn.addEventListener('click', ()=>{ 
-  if(activeAudio){ activeAudio.pause(); activeAudio.currentTime=0; } 
-});
-
-/* ====== TTI (Hugging Face Stable Diffusion) ====== */
-const genImgBtn=document.getElementById('genImgBtn');
-const imgPrompt=document.getElementById('imgPrompt');
-const imgOut=document.getElementById('imgOut');
-const imgSpinner=document.getElementById('imgSpinner');
-
-genImgBtn.addEventListener('click', async ()=>{
-  const prompt=imgPrompt.value.trim();
-  if(!prompt){ alert('Enter prompt'); return; }
-  show(imgSpinner,true);
-  imgOut.innerHTML='';
-
-  try{
-    const r = await fetch(`${BACKEND_URL}/tti`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        prompt,
-        style: document.getElementById('styleSel').value,
-        size: document.getElementById('sizeSel').value
-      })
-    });
-    if(!r.ok){ 
-      const t=await r.text(); 
-      imgOut.innerHTML=`<div style="color:#b00">Error: ${t}</div>`; 
+    if (!r.ok) { 
+      ttsOut.innerHTML = "<div style='color:red'>Failed to generate audio.</div>"; 
       return; 
     }
     const blob = await r.blob();
     const url = blobToUrl(blob);
 
-    const img = document.createElement('img');
-    img.className='thumb';
-    img.src = url;
-    imgOut.appendChild(img);
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = url;
+    audio.autoplay = true;
+    activeAudio = audio;
+    ttsOut.appendChild(audio);
+  } catch (e) {
+    ttsOut.innerHTML = "Network Error";
+  }
+  show(ttsSpinner, false);
+};
 
-    const dl = document.createElement('button');
-    dl.className='btn secondary';
-    dl.textContent='Download image';
-    dl.onclick = () => { const a = document.createElement('a'); a.href=url; a.download='image.png'; a.click(); };
-    imgOut.appendChild(dl);
-  } catch(err){
-    imgOut.innerHTML=`<div style="color:#b00">Network error: ${err.message}</div>`;
-  } finally{ show(imgSpinner,false); }
-});
+document.getElementById('stopTtsBtn').onclick = () => {
+  if (activeAudio) { activeAudio.pause(); activeAudio.currentTime = 0; }
+};
+document.getElementById('clearTtsBtn').onclick = () => {
+  document.getElementById('ttsText').value = "";
+  ttsOut.innerHTML = "";
+};
 
-document.getElementById('clearImgBtn').addEventListener('click', ()=>{ imgPrompt.value=''; imgOut.innerHTML=''; });
+/* ===== TTI ===== */
+const imgOut = document.getElementById('imgOut');
+const imgSpinner = document.getElementById('imgSpinner');
 
-/* ====== CHATBOT (Open-Source or Hugging Face LLM) ====== */
-const chatArea=document.getElementById('chatArea');
-const chatInput=document.getElementById('chatInput');
-const sendChatBtn=document.getElementById('sendChatBtn');
+document.getElementById('genImgBtn').onclick = async () => {
+  const prompt = document.getElementById('imgPrompt').value.trim();
+  if (!prompt) return alert("Enter a prompt");
+  imgOut.innerHTML = "";
+  show(imgSpinner, true);
 
-function addMsg(txt,who='bot'){
-  const d=document.createElement('div');
-  d.className='msg '+(who==='user'?'user':'bot');
-  d.textContent=txt;
-  chatArea.appendChild(d);
-  chatArea.scrollTop=chatArea.scrollHeight;
-}
-
-sendChatBtn.addEventListener('click', async ()=>{
-  const text=chatInput.value.trim();
-  if(!text) return;
-  addMsg(text,'user');
-  chatInput.value='';
-  const spinner=document.createElement('div'); spinner.className='msg bot'; spinner.textContent='...';
-  chatArea.appendChild(spinner);
-  chatArea.scrollTop=chatArea.scrollHeight;
-
-  try{
-    const r = await fetch(`${BACKEND_URL}/chat`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ text })
+  try {
+    const r = await fetch(`${BACKEND_URL}/tti`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        prompt,
+        style: document.getElementById('styleSel').value,
+        size: document.getElementById('sizeSel').value
+      })
     });
-    if(!r.ok){ 
-      const t = await r.text(); 
-      spinner.textContent='Error: '+t; 
+    if (!r.ok) { 
+      imgOut.innerHTML = "<div style='color:red'>Generation failed.</div>"; 
       return; 
     }
-    const j = await r.json();
-    spinner.remove();
-    addMsg(j.reply||j.result||'No reply','bot');
-  } catch(err){ spinner.textContent='Network error: '+err.message; }
+    const blob = await r.blob();
+    const url = blobToUrl(blob);
+    const img = document.createElement("img");
+    img.src = url;
+    img.style.width = "100%";
+    img.style.borderRadius = "12px";
+    imgOut.appendChild(img);
+  } catch (e) {
+    imgOut.innerHTML = "Network Error";
+  }
+  show(imgSpinner, false);
+};
+
+document.getElementById('clearImgBtn').onclick = () => {
+  document.getElementById('imgPrompt').value = "";
+  imgOut.innerHTML = "";
+};
+
+/* ===== CHAT ===== */
+const chatArea = document.getElementById('chatArea');
+
+function addMsg(t, w) {
+  const d = document.createElement('div');
+  d.className = "msg " + w;
+  d.textContent = t;
+  chatArea.appendChild(d);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+const chatInput = document.getElementById('chatInput');
+const clearChatInput = document.getElementById('clearChatInput');
+
+chatInput.addEventListener('input', () => {
+  clearChatInput.style.display = chatInput.value ? 'block' : 'none';
+});
+clearChatInput.addEventListener('click', () => {
+  chatInput.value = "";
+  clearChatInput.style.display = 'none';
 });
 
-/* quick ping */
-(async function ping(){
-  try{
-    const r = await fetch(`${BACKEND_URL}/ping`);
-    console.log('Backend ping',r.status);
-  } catch(e){ console.warn('Backend ping failed',e.message); }
-})();
+document.getElementById('sendChatBtn').onclick = async () => {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  addMsg(text, "user");
+  chatInput.value = "";
+  clearChatInput.style.display = 'none';
+
+  const loading = document.createElement("div");
+  loading.className = "msg bot";
+  loading.textContent = "...";
+  chatArea.appendChild(loading);
+  chatArea.scrollTop = chatArea.scrollHeight;
+
+  try {
+    const r = await fetch(`${BACKEND_URL}/chat`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ message: text })
+    });
+    const j = await r.json();
+    loading.remove();
+    addMsg(j.response || "No reply", "bot"); // ✅ FIXED key
+  } catch (e) {
+    loading.textContent = "Network error";
+  }
+};
+
+document.getElementById('clearChatBtn').onclick = () => {
+  chatArea.innerHTML = "";
+};
 </script>
 </body>
-        </html>
+</html>
